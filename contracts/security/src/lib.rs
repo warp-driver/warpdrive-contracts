@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, String};
 
 #[contracttype]
 pub enum DataKey {
@@ -17,6 +17,16 @@ impl Security {
         env.storage()
             .instance()
             .set(&DataKey::Version, &String::from_str(&env, "0.0.1"));
+    }
+
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+
+        env.storage()
+            .instance()
+            .set(&DataKey::Version, &new_version);
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 
     pub fn admin(env: Env) -> Address {
