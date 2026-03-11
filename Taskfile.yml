@@ -1,0 +1,75 @@
+version: "3"
+
+vars:
+  WASM_TARGET: wasm32-unknown-unknown
+  WASM_DIR: target/{{.WASM_TARGET}}/release
+  CONTRACTS:
+    - project-root
+    - security
+    - verification
+
+tasks:
+  default:
+    cmds:
+      - task: build
+
+  build:
+    desc: Build all contracts to WASM
+    cmds:
+      - cargo build --target {{.WASM_TARGET}} --release
+
+  test:
+    desc: Run all tests
+    deps: [build]
+    cmds:
+      - cargo test
+
+  fmt:
+    desc: Format all code
+    cmds:
+      - cargo fmt --all
+
+  clippy:
+    desc: Lint all code
+    deps: [build]
+    cmds:
+      - cargo clippy --all-targets -- -D warnings
+
+  lint:
+    desc: Format + lint
+    cmds:
+      - task: fmt
+      - task: clippy
+
+  optimize:
+    desc: Optimize WASM artifacts for deployment
+    deps: [build]
+    cmds:
+      - for:
+          var: CONTRACTS
+        cmd: stellar contract optimize --wasm {{.WASM_DIR}}/warpdrive_{{.ITEM | replace "-" "_"}}.wasm
+
+  deploy:
+    desc: Deploy contracts to network
+    requires:
+      vars: [NETWORK, SOURCE]
+    deps: [optimize]
+    cmds:
+      - for:
+          var: CONTRACTS
+        cmd: |
+          echo "Installing {{.ITEM}}..."
+          stellar contract install \
+            --wasm {{.WASM_DIR}}/warpdrive_{{.ITEM | replace "-" "_"}}.optimized.wasm \
+            --source {{.SOURCE}} \
+            --network {{.NETWORK}}
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - cargo clean
+
+  check:
+    desc: Quick cargo check (no WASM build)
+    cmds:
+      - cargo check --all-targets
