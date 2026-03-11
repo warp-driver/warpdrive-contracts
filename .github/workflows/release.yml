@@ -23,17 +23,14 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: wasm32-unknown-unknown
+      - name: Install Task
+        uses: arduino/setup-task@v2
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
-      - name: Build contracts
-        run: cargo build --target wasm32-unknown-unknown --release
       - name: Install Stellar CLI
         run: cargo install stellar-cli --locked
-      - name: Optimize WASM
-        run: |
-          for wasm in target/wasm32-unknown-unknown/release/warpdrive_*.wasm; do
-            stellar contract optimize --wasm "$wasm"
-          done
+      - name: Build & optimize contracts
+        run: task optimize
       - name: Generate checksums
         run: |
           cd target/wasm32-unknown-unknown/release/
