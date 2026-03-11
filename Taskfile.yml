@@ -29,6 +29,11 @@ tasks:
     cmds:
       - cargo fmt --all
 
+  fmt-check:
+    desc: Check formatting (CI)
+    cmds:
+      - cargo fmt --all --check
+
   clippy:
     desc: Lint all code
     deps: [build]
