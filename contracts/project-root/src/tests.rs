@@ -1,2 +1,2 @@
-mod contract;
+mod deploy;
 mod setup;
