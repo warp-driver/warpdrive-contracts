@@ -37,3 +37,6 @@ impl Verification {
         env.storage().instance().get(&DataKey::Version).unwrap()
     }
 }
+
+#[cfg(test)]
+mod tests;

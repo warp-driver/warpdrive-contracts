@@ -3,3 +3,4 @@ target/
 *.wasm
 !contracts/**/*.wasm
 .env
+test_snapshots/
