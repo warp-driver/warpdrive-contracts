@@ -40,7 +40,6 @@ fn test_assert_admin_auth() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
 fn test_assert_admin_unauthorized() {
     let env = Env::default();
 
@@ -57,5 +56,11 @@ fn test_assert_admin_unauthorized() {
         },
     }]);
 
-    client.increment();
+    assert_eq!(
+        client.try_increment(),
+        Err(Ok(soroban_sdk::Error::from_type_and_code(
+            soroban_sdk::xdr::ScErrorType::Context,
+            soroban_sdk::xdr::ScErrorCode::InvalidAction,
+        )))
+    );
 }
