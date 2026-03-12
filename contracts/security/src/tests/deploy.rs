@@ -29,3 +29,19 @@ fn test_upgrade() {
     assert_eq!(client.version(), String::from_str(&env, "0.0.2"));
     assert_eq!(client.admin(), admin);
 }
+
+#[test]
+fn test_counter() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.cost_estimate().budget().reset_unlimited();
+
+    let (client, admin) = deploy_contract(&env);
+    assert_eq!(client.version(), String::from_str(&env, "0.0.1"));
+
+    let new_wasm_hash = install_contract_wasm(&env);
+    client.upgrade(&new_wasm_hash, &String::from_str(&env, "0.0.2"));
+
+    assert_eq!(client.version(), String::from_str(&env, "0.0.2"));
+    assert_eq!(client.admin(), admin);
+}

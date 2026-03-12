@@ -27,4 +27,14 @@ impl Security {
     pub fn version(env: Env) -> String {
         storage::get_version(&env)
     }
+
+    pub fn count(env: Env) -> u64 {
+        storage::get_count(&env)
+    }
+
+    pub fn increment(env: Env) {
+        let admin = storage::get_admin(&env);
+        admin.require_auth();
+        storage::inc_count(&env, None)
+    }
 }
