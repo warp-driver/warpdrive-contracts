@@ -5,7 +5,7 @@ use crate::storage::PubKey;
 use super::setup::deploy_contract;
 use soroban_sdk::{
     testutils::{Address as _, MockAuth, MockAuthInvoke},
-    Address, Env, Vec,
+    Address, Env, IntoVal, Vec,
 };
 
 fn make_signer(env: &Env, seed: u8) -> PubKey {
@@ -82,8 +82,6 @@ fn test_update_signer_weight() {
     assert_eq!(client.list_signers().len(), 1);
 }
 
-
-
 #[test]
 fn test_assert_admin_unauthorized() {
     let env = Env::default();
@@ -125,7 +123,7 @@ fn test_assert_admin_auth() {
         invoke: &MockAuthInvoke {
             contract: &client.address,
             fn_name: "add_signer",
-            args: Vec::new(&env),
+            args: (&key, weight).into_val(&env),
             sub_invokes: &[],
         },
     }]);

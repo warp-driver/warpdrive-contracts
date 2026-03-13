@@ -3,7 +3,7 @@ use soroban_sdk::{Address, BytesN, Env, testutils::Address as _};
 
 mod contract_wasm {
     use crate::storage::PubKey;
-    
+
     soroban_sdk::contractimport!(
         file = "../../target/wasm32-unknown-unknown/release/warpdrive_security.wasm"
     );
