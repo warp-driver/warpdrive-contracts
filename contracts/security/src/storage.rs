@@ -53,7 +53,15 @@ pub fn remove_signer(env: &Env, key: PubKey) {
 // Sums all the weights of registered signers
 pub fn get_total_weight(env: &Env) -> u64 {
     let signers: SignerMap = env.storage().instance().get(&DataKey::Signers).unwrap();
-    signers.iter().map(|(_, v)| v).sum()
+    let keys = signers.keys();
+    let mut total = 0u64;
+    let mut i = 0u32;
+    while i < keys.len() {
+        let key = keys.get_unchecked(i);
+        total += signers.get_unchecked(key);
+        i += 1;
+    }
+    total
 }
 
 // Returns None if signer is not registered, otherwise their weight
@@ -65,9 +73,14 @@ pub fn get_signer_weight(env: &Env, key: PubKey) -> Option<u64> {
 // Get all signers, along with weights
 pub fn list_signers(env: &Env) -> Vec<SignerInfo> {
     let signers: SignerMap = env.storage().instance().get(&DataKey::Signers).unwrap();
+    let keys = signers.keys();
     let mut result = Vec::new(env);
-    for (key, weight) in signers.iter() {
+    let mut i = 0u32;
+    while i < keys.len() {
+        let key = keys.get_unchecked(i);
+        let weight = signers.get_unchecked(key.clone());
         result.push_back(SignerInfo { key, weight });
+        i += 1;
     }
     result
 }
