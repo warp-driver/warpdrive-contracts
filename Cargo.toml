@@ -4,6 +4,14 @@ members = [
     "contracts/*",
 ]
 
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "GPL-3.0-or-later"
+authors = ["WarpDrive"]
+repository = "https://github.com/warp-driver/warpdrive-contracts"
+rust-version = "1.90.0"
+
 [workspace.dependencies]
 soroban-sdk = "25.3.0"
 
