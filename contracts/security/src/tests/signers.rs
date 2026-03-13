@@ -4,8 +4,8 @@ use crate::storage::PubKey;
 
 use super::setup::deploy_contract;
 use soroban_sdk::{
-    testutils::{Address as _, MockAuth, MockAuthInvoke},
     Address, Env, IntoVal, Vec,
+    testutils::{Address as _, MockAuth, MockAuthInvoke},
 };
 
 fn make_signer(env: &Env, seed: u8) -> PubKey {

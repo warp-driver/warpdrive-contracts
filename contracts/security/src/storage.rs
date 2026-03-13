@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, BytesN, Env, Map, String, Vec};
+use soroban_sdk::{Address, BytesN, Env, Map, String, Vec, contracttype};
 
 // Compressed Ethereum PubKey
 pub type PubKey = BytesN<33>;

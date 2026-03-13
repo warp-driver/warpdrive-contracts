@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{Address, BytesN, Env, String, Vec, contract, contractimpl};
 
 use crate::storage::{self, PubKey, SignerInfo};
 
