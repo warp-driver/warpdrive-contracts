@@ -43,8 +43,8 @@ impl Security {
         storage::get_total_weight(&env)
     }
 
-    pub fn get_signer_weight(env: Env, key: PubKey) -> Option<u64> {
-        storage::get_signer_weight(&env, key)
+    pub fn get_signer_weight(env: Env, key: PubKey) -> u64 {
+        storage::get_signer_weight(&env, key).unwrap_or(0)
     }
 
     pub fn list_signers(env: Env) -> Vec<SignerInfo> {

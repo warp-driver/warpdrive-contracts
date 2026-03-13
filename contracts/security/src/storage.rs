@@ -40,12 +40,14 @@ pub fn init_signers(env: &Env) {
 
 pub fn add_signer(env: &Env, key: PubKey, weight: u64){
     let mut signers: SignerMap = env.storage().instance().get(&DataKey::Signers).unwrap();
-    signers.set(key, weight)
+    signers.set(key, weight);
+    env.storage().instance().set(&DataKey::Signers, &signers);
 }
 
 pub fn remove_signer(env: &Env, key: PubKey){
     let mut signers: SignerMap = env.storage().instance().get(&DataKey::Signers).unwrap();
     signers.remove(key);
+    env.storage().instance().set(&DataKey::Signers, &signers);
 }
 
 // Sums all the weights of registered signers
