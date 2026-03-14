@@ -5,7 +5,7 @@ mod contract_wasm {
     use crate::storage::PubKey;
 
     soroban_sdk::contractimport!(
-        file = "../../target/wasm32-unknown-unknown/release/warpdrive_security.wasm"
+        file = "../../target/wasm32v1-none/release/warpdrive_security.wasm"
     );
 }
 

@@ -1,7 +1,7 @@
 version: "3"
 
 vars:
-  WASM_TARGET: wasm32-unknown-unknown
+  WASM_TARGET: wasm32v1-none
   WASM_DIR: target/{{.WASM_TARGET}}/release
   CONTRACTS:
     - project-root
