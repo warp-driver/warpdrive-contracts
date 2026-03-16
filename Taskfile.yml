@@ -1,7 +1,7 @@
 version: "3"
 
 vars:
-  WASM_TARGET: wasm32-unknown-unknown
+  WASM_TARGET: wasm32v1-none
   WASM_DIR: target/{{.WASM_TARGET}}/release
   CONTRACTS:
     - project-root
@@ -19,10 +19,16 @@ tasks:
       - cargo build --target {{.WASM_TARGET}} --release
 
   test:
-    desc: Run all tests
+    desc: Run unit tests
     deps: [build]
     cmds:
-      - cargo test
+      - cargo test --lib
+
+  doc-test:
+    desc: Run documentation tests
+    deps: [build]
+    cmds:
+      - cargo test --doc
 
   fmt:
     desc: Format all code
