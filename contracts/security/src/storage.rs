@@ -15,6 +15,8 @@ pub enum DataKey {
     Admin,
     Version,
     Signers,
+    ThresholdNumerator,
+    ThresholdDenominator,
 }
 
 pub fn get_admin(env: &Env) -> Address {
@@ -31,6 +33,32 @@ pub fn get_version(env: &Env) -> String {
 
 pub fn set_version(env: &Env, version: &String) {
     env.storage().instance().set(&DataKey::Version, version);
+}
+
+pub fn get_threshold_numerator(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::ThresholdNumerator)
+        .unwrap()
+}
+
+pub fn set_threshold_numerator(env: &Env, value: u64) {
+    env.storage()
+        .instance()
+        .set(&DataKey::ThresholdNumerator, &value);
+}
+
+pub fn get_threshold_denominator(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::ThresholdDenominator)
+        .unwrap()
+}
+
+pub fn set_threshold_denominator(env: &Env, value: u64) {
+    env.storage()
+        .instance()
+        .set(&DataKey::ThresholdDenominator, &value);
 }
 
 pub fn init_signers(env: &Env) {

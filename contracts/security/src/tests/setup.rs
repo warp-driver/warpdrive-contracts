@@ -11,7 +11,7 @@ mod contract_wasm {
 
 pub fn deploy_contract<'a>(env: &Env) -> (SecurityClient<'a>, Address) {
     let admin = Address::generate(env);
-    let contract_id = env.register(Security, (&admin,));
+    let contract_id = env.register(Security, (&admin, 2u64, 3u64));
     let client = SecurityClient::new(env, &contract_id);
     (client, admin)
 }

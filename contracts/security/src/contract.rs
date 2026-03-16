@@ -7,10 +7,17 @@ pub struct Security;
 
 #[contractimpl]
 impl Security {
-    pub fn __constructor(env: Env, admin: Address) {
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        threshold_numerator: u64,
+        threshold_denominator: u64,
+    ) {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::init_signers(&env);
+        storage::set_threshold_numerator(&env, threshold_numerator);
+        storage::set_threshold_denominator(&env, threshold_denominator);
     }
 
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
@@ -49,5 +56,26 @@ impl Security {
 
     pub fn list_signers(env: Env) -> Vec<SignerInfo> {
         storage::list_signers(&env)
+    }
+
+    pub fn set_threshold(env: Env, numerator: u64, denominator: u64) {
+        storage::get_admin(&env).require_auth();
+        storage::set_threshold_numerator(&env, numerator);
+        storage::set_threshold_denominator(&env, denominator);
+    }
+
+    pub fn threshold_numerator(env: Env) -> u64 {
+        storage::get_threshold_numerator(&env)
+    }
+
+    pub fn threshold_denominator(env: Env) -> u64 {
+        storage::get_threshold_denominator(&env)
+    }
+
+    pub fn required_weight(env: Env) -> u64 {
+        let total = storage::get_total_weight(&env);
+        let numerator = storage::get_threshold_numerator(&env);
+        let denominator = storage::get_threshold_denominator(&env);
+        total * numerator / denominator
     }
 }
