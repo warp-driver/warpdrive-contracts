@@ -16,3 +16,5 @@ soroban-sdk = { workspace = true }
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 warpdrive-security = { path = "../security" }
+k256 = { version = "0.13.4", features = ["ecdsa"] }
+sha3 = "0.10.8"
