@@ -1893,6 +1893,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "warpdrive-handler"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "warpdrive-security",
+ "warpdrive-verification",
+]
+
+[[package]]
 name = "warpdrive-project-root"
 version = "0.1.0"
 dependencies = [

@@ -92,8 +92,14 @@ fn test_signer_weight_existing() {
     let key1 = make_signing_key(1);
     let key2 = make_signing_key(2);
 
-    assert_eq!(verification.signer_weight(&compressed_pubkey(&env, &key1)), 100);
-    assert_eq!(verification.signer_weight(&compressed_pubkey(&env, &key2)), 200);
+    assert_eq!(
+        verification.signer_weight(&compressed_pubkey(&env, &key1)),
+        100
+    );
+    assert_eq!(
+        verification.signer_weight(&compressed_pubkey(&env, &key2)),
+        200
+    );
 }
 
 #[test]
@@ -102,7 +108,10 @@ fn test_signer_weight_missing() {
     let (verification, _security) = setup_contracts(&env);
 
     let key3 = make_signing_key(3);
-    assert_eq!(verification.signer_weight(&compressed_pubkey(&env, &key3)), 0);
+    assert_eq!(
+        verification.signer_weight(&compressed_pubkey(&env, &key3)),
+        0
+    );
 }
 
 #[test]
