@@ -1,10 +1,11 @@
-use soroban_sdk::{Address, Env, String, contracttype};
+use soroban_sdk::{Address, BytesN, Env, String, contracttype};
 
 #[contracttype]
 pub enum DataKey {
     Admin,
     Version,
     VerificationContract,
+    EventSeen(BytesN<20>),
 }
 
 pub fn get_admin(env: &Env) -> Address {
@@ -34,4 +35,16 @@ pub fn set_verification_contract(env: &Env, address: &Address) {
     env.storage()
         .instance()
         .set(&DataKey::VerificationContract, address);
+}
+
+pub fn is_event_seen(env: &Env, event_id: &BytesN<20>) -> bool {
+    env.storage()
+        .persistent()
+        .has(&DataKey::EventSeen(event_id.clone()))
+}
+
+pub fn mark_event_seen(env: &Env, event_id: &BytesN<20>) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::EventSeen(event_id.clone()), &true);
 }

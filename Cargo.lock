@@ -1896,6 +1896,8 @@ dependencies = [
 name = "warpdrive-handler"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
  "soroban-sdk",
  "warpdrive-security",
  "warpdrive-verification",
@@ -1919,8 +1921,6 @@ dependencies = [
 name = "warpdrive-verification"
 version = "0.1.0"
 dependencies = [
- "alloy-primitives",
- "alloy-sol-types",
  "k256",
  "sha3",
  "soroban-sdk",
