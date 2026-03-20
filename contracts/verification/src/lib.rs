@@ -1,6 +1,7 @@
 #![no_std]
 
 mod contract;
+pub mod envelope;
 mod security_client;
 pub mod storage;
 pub mod utils;
