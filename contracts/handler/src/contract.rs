@@ -4,7 +4,7 @@ use soroban_sdk::{
 
 use crate::envelope::Envelope;
 use crate::storage;
-use crate::verification_client::VerificationClient;
+use crate::verification_client::{VerificationClient, VerifyError};
 
 #[contracttype]
 pub struct SignatureData {
@@ -17,7 +17,31 @@ pub struct SignatureData {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum HandlerError {
+    // Errors from the handler itself
     EventAlreadySeen = 1,
+
+    // Some numbers intentionally skipped...
+    UnknownVerificationError = 20,
+    // Copied from VerifyError
+    InvalidSignature = 21,
+    SignerNotRegistered = 22,
+    InsufficientWeight = 23,
+    EmptySignatures = 24,
+    LengthMismatch = 25,
+    SignersNotOrdered = 26,
+}
+
+impl From<VerifyError> for HandlerError {
+    fn from(value: VerifyError) -> Self {
+        match value {
+            VerifyError::InvalidSignature => HandlerError::InvalidSignature,
+            VerifyError::SignerNotRegistered => HandlerError::SignerNotRegistered,
+            VerifyError::InsufficientWeight => HandlerError::InsufficientWeight,
+            VerifyError::EmptySignatures => HandlerError::EmptySignatures,
+            VerifyError::LengthMismatch => HandlerError::LengthMismatch,
+            VerifyError::SignersNotOrdered => HandlerError::SignersNotOrdered,
+        }
+    }
 }
 
 #[contract]
@@ -69,7 +93,24 @@ impl Handler {
         // Errors from the verification contract propagate directly as contract errors.
         let verification_addr = storage::get_verification_contract(&env);
         let verification = VerificationClient::new(&env, &verification_addr);
-        verification.verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
+        let res = verification.try_verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
+        match res {
+            Ok(_) => {}
+            Err(Ok(e)) => {
+                // Contract error from verification contract — extract the error code
+                if let Ok(soroban_sdk::xdr::ScError::Contract(code)) =
+                    soroban_sdk::xdr::ScError::try_from(e)
+                {
+                    let err = VerifyError::from_repr(code)
+                        .ok_or(HandlerError::UnknownVerificationError)?;
+                    return Err(HandlerError::from(err));
+                }
+                return Err(HandlerError::UnknownVerificationError);
+            }
+            Err(Err(_invoke_err)) => {
+                return Err(HandlerError::UnknownVerificationError);
+            }
+        }
 
         // Mark event as seen
         storage::mark_event_seen(&env, &event_id);

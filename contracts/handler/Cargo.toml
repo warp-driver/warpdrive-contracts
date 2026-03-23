@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 soroban-sdk = { workspace = true, features = ["alloc"] }
 alloy-sol-types = { version = "1", default-features = false }
 alloy-primitives = { version = "1", default-features = false }
+enum-repr = "0.2.6"
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

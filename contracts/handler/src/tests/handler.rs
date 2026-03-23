@@ -189,10 +189,9 @@ fn test_verify_invalid_signature_fails() {
         reference_block: 0,
     };
 
-    let result = client.try_verify(&envelope, &sig_data);
-    assert!(
-        result.is_err(),
-        "expected verification to fail with InvalidSignature"
+    assert_eq!(
+        client.try_verify(&envelope, &sig_data),
+        Err(Ok(HandlerError::InvalidSignature)),
     );
 }
 
@@ -205,9 +204,8 @@ fn test_verify_insufficient_weight_fails() {
     // key1 has weight 100 < required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1)]);
 
-    let result = client.try_verify(&envelope, &sig_data);
-    assert!(
-        result.is_err(),
-        "expected verification to fail with InsufficientWeight"
+    assert_eq!(
+        client.try_verify(&envelope, &sig_data),
+        Err(Ok(HandlerError::InsufficientWeight)),
     );
 }
