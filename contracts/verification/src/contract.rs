@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Bytes, BytesN, Env, String, contract, contracterror, contractimpl};
+use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractimpl};
 
 use crate::security_client::SecurityClient;
 
@@ -12,6 +12,9 @@ pub enum VerifyError {
     InvalidSignature = 1,
     SignerNotRegistered = 2,
     InsufficientWeight = 3,
+    EmptySignatures = 4,
+    LengthMismatch = 5,
+    SignersNotOrdered = 6,
 }
 
 #[contract]
@@ -55,7 +58,7 @@ impl Verification {
         SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
     }
 
-    pub fn verify(
+    pub fn verify_one(
         env: Env,
         envelope: Bytes,
         signature: BytesN<65>,
@@ -78,6 +81,58 @@ impl Verification {
         // 3. Check if signer's weight meets the required threshold
         let required = security.required_weight();
         if weight < required {
+            return Err(VerifyError::InsufficientWeight);
+        }
+
+        Ok(())
+    }
+
+    pub fn verify(
+        env: Env,
+        envelope: Bytes,
+        signatures: Vec<BytesN<65>>,
+        signer_pubkeys: Vec<PubKey>,
+    ) -> Result<(), VerifyError> {
+        if signatures.is_empty() {
+            return Err(VerifyError::EmptySignatures);
+        }
+
+        if signatures.len() != signer_pubkeys.len() {
+            return Err(VerifyError::LengthMismatch);
+        }
+
+        let security_addr = storage::get_security_contract(&env);
+        let security = SecurityClient::new(&env, &security_addr);
+
+        let mut total_weight: u64 = 0;
+        let mut prev_pubkey: Option<PubKey> = None;
+
+        for i in 0..signatures.len() {
+            let sig = signatures.get(i).unwrap();
+            let pubkey = signer_pubkeys.get(i).unwrap();
+
+            // Enforce strict ascending order of pubkeys (no duplicates)
+            if let Some(ref prev) = prev_pubkey {
+                if pubkey.to_array() <= prev.to_array() {
+                    return Err(VerifyError::SignersNotOrdered);
+                }
+            }
+            prev_pubkey = Some(pubkey.clone());
+
+            if !utils::is_valid_signature(&env, &envelope, &sig, &pubkey) {
+                return Err(VerifyError::InvalidSignature);
+            }
+
+            let weight = security.get_signer_weight(&pubkey);
+            if weight == 0 {
+                return Err(VerifyError::SignerNotRegistered);
+            }
+
+            total_weight += weight;
+        }
+
+        let required = security.required_weight();
+        if total_weight < required {
             return Err(VerifyError::InsufficientWeight);
         }
 
