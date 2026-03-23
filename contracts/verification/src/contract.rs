@@ -1,4 +1,6 @@
-use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractimpl};
+use soroban_sdk::{
+    Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractimpl,
+};
 
 use crate::security_client::SecurityClient;
 
@@ -112,10 +114,10 @@ impl Verification {
             let pubkey = signer_pubkeys.get(i).unwrap();
 
             // Enforce strict ascending order of pubkeys (no duplicates)
-            if let Some(ref prev) = prev_pubkey {
-                if pubkey.to_array() <= prev.to_array() {
-                    return Err(VerifyError::SignersNotOrdered);
-                }
+            if let Some(ref prev) = prev_pubkey
+                && pubkey.to_array() <= prev.to_array()
+            {
+                return Err(VerifyError::SignersNotOrdered);
             }
             prev_pubkey = Some(pubkey.clone());
 

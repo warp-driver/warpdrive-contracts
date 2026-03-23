@@ -357,10 +357,6 @@ fn test_verify_multi_insufficient_total_weight() {
     let pk1 = compressed_pubkey(&env, &key1);
     let pk2 = compressed_pubkey(&env, &key2);
 
-    // threshold 90/100 — both signers needed at very high threshold
-    let security_id = env.register(Security, (&admin, 90u64, 100u64));
-    let security = SecurityClient::new(&env, &security_id);
-
     // key1 weight 10, key2 weight 10 — total 20, required = 20 * 90 / 100 = 18
     // Actually that passes. Use weight 5 each: total 10, required = 10 * 90 / 100 = 9 — passes too.
     // Let's use: key1 weight 1, key2 not added. Single signer, weight 1, threshold 90%.
@@ -368,12 +364,12 @@ fn test_verify_multi_insufficient_total_weight() {
     // Better: use the default setup (key1=100, key2=200, threshold 55%).
     // required = 300 * 55 / 100 = 165. key1 alone = 100 < 165.
     // So just use key1 alone in multi-verify.
-    let security_id2 = env.register(Security, (&admin, 55u64, 100u64));
-    let security2 = SecurityClient::new(&env, &security_id2);
-    security2.mock_all_auths().add_signer(&pk1, &100);
-    security2.mock_all_auths().add_signer(&pk2, &200);
+    let security_id = env.register(Security, (&admin, 55u64, 100u64));
+    let security = SecurityClient::new(&env, &security_id);
+    security.mock_all_auths().add_signer(&pk1, &100);
+    security.mock_all_auths().add_signer(&pk2, &200);
 
-    let verification_id = env.register(Verification, (&admin, &security_id2));
+    let verification_id = env.register(Verification, (&admin, &security_id));
     let verification = VerificationClient::new(&env, &verification_id);
 
     let message = b"hello world";

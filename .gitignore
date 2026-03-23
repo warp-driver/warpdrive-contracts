@@ -2,5 +2,6 @@ target/
 .soroban/
 *.wasm
 !contracts/**/*.wasm
+.claude/
 .env
 test_snapshots/

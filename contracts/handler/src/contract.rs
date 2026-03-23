@@ -4,10 +4,11 @@ use soroban_sdk::{
 
 use crate::envelope::Envelope;
 use crate::storage;
+use crate::verification_client::VerificationClient;
 
 #[contracttype]
 pub struct SignatureData {
-    pub signers: Vec<BytesN<20>>,
+    pub signers: Vec<BytesN<33>>,
     pub signatures: Vec<BytesN<65>>,
     pub reference_block: u32,
 }
@@ -17,7 +18,6 @@ pub struct SignatureData {
 #[repr(u32)]
 pub enum HandlerError {
     EventAlreadySeen = 1,
-    VerificationFailed = 2,
 }
 
 #[contract]
@@ -54,7 +54,7 @@ impl Handler {
     pub fn verify(
         env: Env,
         envelope_bytes: Bytes,
-        _sig_data: SignatureData,
+        sig_data: SignatureData,
     ) -> Result<(), HandlerError> {
         // Parse the ABI-encoded envelope
         let envelope = Envelope::abi_decode_from(&envelope_bytes);
@@ -65,16 +65,14 @@ impl Handler {
             return Err(HandlerError::EventAlreadySeen);
         }
 
+        // Verify signatures via the verification contract.
+        // Errors from the verification contract propagate directly as contract errors.
+        let verification_addr = storage::get_verification_contract(&env);
+        let verification = VerificationClient::new(&env, &verification_addr);
+        verification.verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
+
         // Mark event as seen
         storage::mark_event_seen(&env, &event_id);
-
-        // TODO: For each signer/signature pair, call the verification contract
-        // to verify the envelope was signed correctly.
-        // let verification_addr = storage::get_verification_contract(&env);
-        // let verification = VerificationClient::new(&env, &verification_addr);
-        // for i in 0..sig_data.signatures.len() {
-        //     verification.verify(&envelope_bytes, &sig_data.signatures.get(i), &pubkey)?;
-        // }
 
         Ok(())
     }
