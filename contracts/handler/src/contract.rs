@@ -53,6 +53,7 @@ impl Handler {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_verification_contract(&env, &verification_contract);
+        storage::init_payloads(&env);
     }
 
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
@@ -73,6 +74,10 @@ impl Handler {
 
     pub fn verification_contract(env: Env) -> Address {
         storage::get_verification_contract(&env)
+    }
+
+    pub fn payload(env: Env, event_id: BytesN<20>) -> Bytes {
+        storage::get_payload(&env, event_id).unwrap()
     }
 
     pub fn verify(
@@ -114,6 +119,10 @@ impl Handler {
 
         // Mark event as seen
         storage::mark_event_seen(&env, &event_id);
+
+        // Save payload
+        let payload = Bytes::from_slice(&env, envelope.payload.as_ref());
+        storage::save_payload(&env, event_id, payload);
 
         Ok(())
     }

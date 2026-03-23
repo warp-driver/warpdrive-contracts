@@ -49,11 +49,21 @@ fn make_envelope_bytes(env: &Env, event_id_seed: u8) -> Bytes {
     let envelope = Envelope {
         eventId: FixedBytes(event_id),
         ordering: FixedBytes([0u8; 12]),
-        payload: alloc::vec![].into(),
+        payload: alloc::vec![event_id_seed; 8].into(),
     };
 
     let encoded = envelope.abi_encode();
     Bytes::from_slice(env, &encoded)
+}
+
+fn expected_event_id(env: &Env, seed: u8) -> BytesN<20> {
+    let mut id = [0u8; 20];
+    id[0] = seed;
+    BytesN::from_array(env, &id)
+}
+
+fn expected_payload(env: &Env, seed: u8) -> Bytes {
+    Bytes::from_slice(env, &[seed; 8])
 }
 
 /// Returns (handler_client, key1, pubkey1, key2, pubkey2) with key1 and key2
@@ -119,6 +129,11 @@ fn test_verify_success() {
 
     let result = client.try_verify(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
+
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
 }
 
 #[test]
@@ -131,6 +146,11 @@ fn test_verify_success_combined_weight() {
 
     let result = client.try_verify(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
+
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
 }
 
 // ── Duplicate event ─────────────────────────────────────────────────
@@ -145,6 +165,12 @@ fn test_verify_duplicate_event_fails() {
 
     let result = client.try_verify(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
+
+    // Payload was saved on first call
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
 
     // Same event_id again
     let result = client.try_verify(&envelope, &sig_data);
@@ -163,10 +189,19 @@ fn test_verify_different_events_succeed() {
 
     assert_eq!(client.try_verify(&env1, &sig1), Ok(Ok(())));
     assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
+
+    assert_eq!(
         client.try_verify(&env1, &sig1),
         Err(Ok(HandlerError::EventAlreadySeen))
     );
     assert_eq!(client.try_verify(&env2, &sig2), Ok(Ok(())));
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 2)),
+        expected_payload(&env, 2)
+    );
 }
 
 // ── Verification errors propagate from verification contract ────────
@@ -193,6 +228,9 @@ fn test_verify_invalid_signature_fails() {
         client.try_verify(&envelope, &sig_data),
         Err(Ok(HandlerError::InvalidSignature)),
     );
+
+    // Payload should not be saved on failure
+    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
 }
 
 #[test]
@@ -208,4 +246,7 @@ fn test_verify_insufficient_weight_fails() {
         client.try_verify(&envelope, &sig_data),
         Err(Ok(HandlerError::InsufficientWeight)),
     );
+
+    // Payload should not be saved on failure
+    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
 }
