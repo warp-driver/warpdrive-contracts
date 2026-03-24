@@ -1910,6 +1910,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
  "enum-repr",
+ "hex-literal",
  "k256",
  "sha3",
  "soroban-sdk",
