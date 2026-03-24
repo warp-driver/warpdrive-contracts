@@ -1,12 +1,14 @@
 extern crate alloc;
 extern crate std;
 
+use crate::contract::XlmEnvelope;
 use crate::envelope::Envelope;
 use crate::{Handler, HandlerClient, HandlerError, SignatureData};
 use alloy_primitives::FixedBytes;
 use alloy_sol_types::SolValue;
 use k256::ecdsa::SigningKey;
 use sha3::{Digest, Keccak256};
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _};
 use warpdrive_security::{Security, SecurityClient};
 use warpdrive_verification::Verification;
@@ -42,7 +44,7 @@ fn sign_envelope(key: &SigningKey, envelope: &[u8]) -> [u8; 65] {
     result
 }
 
-fn make_envelope_bytes(env: &Env, event_id_seed: u8) -> Bytes {
+fn make_envelope_bytes_eth(env: &Env, event_id_seed: u8) -> Bytes {
     let mut event_id = [0u8; 20];
     event_id[0] = event_id_seed;
 
@@ -54,6 +56,19 @@ fn make_envelope_bytes(env: &Env, event_id_seed: u8) -> Bytes {
 
     let encoded = envelope.abi_encode();
     Bytes::from_slice(env, &encoded)
+}
+
+fn make_envelope_bytes_xlm(env: &Env, event_id_seed: u8) -> Bytes {
+    let mut event_id = [0u8; 20];
+    event_id[0] = event_id_seed;
+
+    let envelope = XlmEnvelope {
+        event_id: BytesN::from_array(env, &event_id),
+        ordering: BytesN::from_array(env, &[0u8; 12]),
+        payload: Bytes::from_slice(env, &[event_id_seed; 8]),
+    };
+
+    envelope.to_xdr(env)
 }
 
 fn expected_event_id(env: &Env, seed: u8) -> BytesN<20> {
@@ -116,6 +131,8 @@ fn make_sig_data(
     }
 }
 
+/********************** ETH VARIANT *******************/
+
 // ── Happy path ──────────────────────────────────────────────────────
 
 #[test]
@@ -123,11 +140,11 @@ fn test_verify_success() {
     let env = Env::default();
     let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
 
-    let envelope = make_envelope_bytes(&env, 1);
+    let envelope = make_envelope_bytes_eth(&env, 1);
     // key2 has weight 200 >= required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
-    let result = client.try_verify(&envelope, &sig_data);
+    let result = client.try_verify_eth(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
 
     assert_eq!(
@@ -141,10 +158,10 @@ fn test_verify_success_combined_weight() {
     let env = Env::default();
     let (client, key1, pk1, key2, pk2) = setup_handler_with_signers(&env);
 
-    let envelope = make_envelope_bytes(&env, 1);
+    let envelope = make_envelope_bytes_eth(&env, 1);
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1), (key2, pk2)]);
 
-    let result = client.try_verify(&envelope, &sig_data);
+    let result = client.try_verify_eth(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
 
     assert_eq!(
@@ -160,10 +177,10 @@ fn test_verify_duplicate_event_fails() {
     let env = Env::default();
     let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
 
-    let envelope = make_envelope_bytes(&env, 1);
+    let envelope = make_envelope_bytes_eth(&env, 1);
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
-    let result = client.try_verify(&envelope, &sig_data);
+    let result = client.try_verify_eth(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
 
     // Payload was saved on first call
@@ -173,7 +190,7 @@ fn test_verify_duplicate_event_fails() {
     );
 
     // Same event_id again
-    let result = client.try_verify(&envelope, &sig_data);
+    let result = client.try_verify_eth(&envelope, &sig_data);
     assert_eq!(result, Err(Ok(HandlerError::EventAlreadySeen)));
 }
 
@@ -182,22 +199,22 @@ fn test_verify_different_events_succeed() {
     let env = Env::default();
     let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
 
-    let env1 = make_envelope_bytes(&env, 1);
-    let env2 = make_envelope_bytes(&env, 2);
+    let env1 = make_envelope_bytes_eth(&env, 1);
+    let env2 = make_envelope_bytes_eth(&env, 2);
     let sig1 = make_sig_data(&env, &env1.to_alloc_vec(), &[(key2.clone(), pk2.clone())]);
     let sig2 = make_sig_data(&env, &env2.to_alloc_vec(), &[(key2, pk2)]);
 
-    assert_eq!(client.try_verify(&env1, &sig1), Ok(Ok(())));
+    assert_eq!(client.try_verify_eth(&env1, &sig1), Ok(Ok(())));
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
         expected_payload(&env, 1)
     );
 
     assert_eq!(
-        client.try_verify(&env1, &sig1),
+        client.try_verify_eth(&env1, &sig1),
         Err(Ok(HandlerError::EventAlreadySeen))
     );
-    assert_eq!(client.try_verify(&env2, &sig2), Ok(Ok(())));
+    assert_eq!(client.try_verify_eth(&env2, &sig2), Ok(Ok(())));
     assert_eq!(
         client.payload(&expected_event_id(&env, 2)),
         expected_payload(&env, 2)
@@ -211,7 +228,7 @@ fn test_verify_invalid_signature_fails() {
     let env = Env::default();
     let (client, _key1, _pk1, _key2, pk2) = setup_handler_with_signers(&env);
 
-    let envelope = make_envelope_bytes(&env, 1);
+    let envelope = make_envelope_bytes_eth(&env, 1);
 
     let mut signers: Vec<PubKey> = Vec::new(&env);
     signers.push_back(pk2);
@@ -225,7 +242,7 @@ fn test_verify_invalid_signature_fails() {
     };
 
     assert_eq!(
-        client.try_verify(&envelope, &sig_data),
+        client.try_verify_eth(&envelope, &sig_data),
         Err(Ok(HandlerError::InvalidSignature)),
     );
 
@@ -238,15 +255,204 @@ fn test_verify_insufficient_weight_fails() {
     let env = Env::default();
     let (client, key1, pk1, _key2, _pk2) = setup_handler_with_signers(&env);
 
-    let envelope = make_envelope_bytes(&env, 1);
+    let envelope = make_envelope_bytes_eth(&env, 1);
     // key1 has weight 100 < required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1)]);
 
     assert_eq!(
-        client.try_verify(&envelope, &sig_data),
+        client.try_verify_eth(&envelope, &sig_data),
         Err(Ok(HandlerError::InsufficientWeight)),
     );
 
     // Payload should not be saved on failure
     assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
+}
+
+/********************** XLM VARIANT *******************/
+
+// ── Happy path ──────────────────────────────────────────────────────
+
+#[test]
+fn test_verify_success_xlm() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_xlm(&env, 1);
+    // key2 has weight 200 >= required 165
+    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
+
+    let result = client.try_verify_xlm(&envelope, &sig_data);
+    assert_eq!(result, Ok(Ok(())));
+
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
+}
+
+#[test]
+fn test_verify_success_combined_weight_xlm() {
+    let env = Env::default();
+    let (client, key1, pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_xlm(&env, 1);
+    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1), (key2, pk2)]);
+
+    let result = client.try_verify_xlm(&envelope, &sig_data);
+    assert_eq!(result, Ok(Ok(())));
+
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
+}
+
+// ── Duplicate event ─────────────────────────────────────────────────
+
+#[test]
+fn test_verify_duplicate_event_fails_xlm() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_xlm(&env, 1);
+    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
+
+    let result = client.try_verify_xlm(&envelope, &sig_data);
+    assert_eq!(result, Ok(Ok(())));
+
+    // Payload was saved on first call
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
+
+    // Same event_id again
+    let result = client.try_verify_xlm(&envelope, &sig_data);
+    assert_eq!(result, Err(Ok(HandlerError::EventAlreadySeen)));
+}
+
+#[test]
+fn test_verify_different_events_succeed_xlm() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let env1 = make_envelope_bytes_xlm(&env, 1);
+    let env2 = make_envelope_bytes_xlm(&env, 2);
+    let sig1 = make_sig_data(&env, &env1.to_alloc_vec(), &[(key2.clone(), pk2.clone())]);
+    let sig2 = make_sig_data(&env, &env2.to_alloc_vec(), &[(key2, pk2)]);
+
+    assert_eq!(client.try_verify_xlm(&env1, &sig1), Ok(Ok(())));
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
+
+    assert_eq!(
+        client.try_verify_xlm(&env1, &sig1),
+        Err(Ok(HandlerError::EventAlreadySeen))
+    );
+    assert_eq!(client.try_verify_xlm(&env2, &sig2), Ok(Ok(())));
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 2)),
+        expected_payload(&env, 2)
+    );
+}
+
+// ── Verification errors propagate from verification contract ────────
+
+#[test]
+fn test_verify_invalid_signature_fails_xlm() {
+    let env = Env::default();
+    let (client, _key1, _pk1, _key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_xlm(&env, 1);
+
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(pk2);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &[0xAA; 65]));
+
+    let sig_data = SignatureData {
+        signers,
+        signatures,
+        reference_block: 0,
+    };
+
+    assert_eq!(
+        client.try_verify_xlm(&envelope, &sig_data),
+        Err(Ok(HandlerError::InvalidSignature)),
+    );
+
+    // Payload should not be saved on failure
+    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
+}
+
+#[test]
+fn test_verify_insufficient_weight_fails_xlm() {
+    let env = Env::default();
+    let (client, key1, pk1, _key2, _pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_xlm(&env, 1);
+    // key1 has weight 100 < required 165
+    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1)]);
+
+    assert_eq!(
+        client.try_verify_xlm(&envelope, &sig_data),
+        Err(Ok(HandlerError::InsufficientWeight)),
+    );
+
+    // Payload should not be saved on failure
+    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
+}
+
+/********************* XLM vs ETH **************************/
+
+#[test]
+fn test_eth_refuses_xlm_packets() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_xlm(&env, 1);
+    // key2 has weight 200 >= required 165
+    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
+
+    // Must fail
+    client
+        .try_verify_eth(&envelope, &sig_data)
+        .unwrap_err()
+        .unwrap_err();
+
+    // Must pass
+    let result = client.try_verify_xlm(&envelope, &sig_data);
+    assert_eq!(result, Ok(Ok(())));
+
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
+}
+
+#[test]
+fn test_xlm_refuses_eth_packets() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    // key2 has weight 200 >= required 165
+    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
+
+    // Must fail
+    client
+        .try_verify_xlm(&envelope, &sig_data)
+        .unwrap_err()
+        .unwrap_err();
+
+    // Must pass
+    let result = client.try_verify_eth(&envelope, &sig_data);
+    assert_eq!(result, Ok(Ok(())));
+
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        expected_payload(&env, 1)
+    );
 }

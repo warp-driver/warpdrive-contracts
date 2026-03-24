@@ -1,8 +1,9 @@
 use soroban_sdk::{
     Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractimpl, contracttype,
+    xdr::FromXdr,
 };
 
-use crate::envelope::Envelope;
+use crate::envelope::Envelope as EthEnvelope;
 use crate::storage;
 use crate::verification_client::{VerificationClient, VerifyError};
 
@@ -11,6 +12,13 @@ pub struct SignatureData {
     pub signers: Vec<BytesN<33>>,
     pub signatures: Vec<BytesN<65>>,
     pub reference_block: u32,
+}
+
+#[contracttype]
+pub struct XlmEnvelope {
+    pub event_id: BytesN<20>,
+    pub ordering: BytesN<12>,
+    pub payload: Bytes,
 }
 
 #[contracterror]
@@ -80,13 +88,14 @@ impl Handler {
         storage::get_payload(&env, event_id).unwrap()
     }
 
-    pub fn verify(
+    /// This verifies the packet, assuming the envelope is abi-encoded (Ethereum format) for compatibility
+    pub fn verify_eth(
         env: Env,
         envelope_bytes: Bytes,
         sig_data: SignatureData,
     ) -> Result<(), HandlerError> {
         // Parse the ABI-encoded envelope
-        let envelope = Envelope::abi_decode_from(&envelope_bytes);
+        let envelope = EthEnvelope::abi_decode_from(&envelope_bytes);
         let event_id = BytesN::from_array(&env, &envelope.eventId.0);
 
         // Check for duplicate event
@@ -123,6 +132,52 @@ impl Handler {
         // Save payload
         let payload = Bytes::from_slice(&env, envelope.payload.as_ref());
         storage::save_payload(&env, event_id, payload);
+
+        Ok(())
+    }
+
+    /// This verifies the packet, assuming the envelope is XDR-encoded (Soroban native format)
+    pub fn verify_xlm(
+        env: Env,
+        envelope_bytes: Bytes,
+        sig_data: SignatureData,
+    ) -> Result<(), HandlerError> {
+        // Parse XDR bytes into the typed envelope
+        let envelope = XlmEnvelope::from_xdr(&env, &envelope_bytes).expect("invalid XLM envelope");
+        let event_id = envelope.event_id;
+
+        // Check for duplicate event
+        if storage::is_event_seen(&env, &event_id) {
+            return Err(HandlerError::EventAlreadySeen);
+        }
+
+        // Verify signatures against the raw envelope bytes (what was actually signed)
+        let verification_addr = storage::get_verification_contract(&env);
+        let verification = VerificationClient::new(&env, &verification_addr);
+        let res = verification.try_verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
+        match res {
+            Ok(_) => {}
+            Err(Ok(e)) => {
+                // Contract error from verification contract — extract the error code
+                if let Ok(soroban_sdk::xdr::ScError::Contract(code)) =
+                    soroban_sdk::xdr::ScError::try_from(e)
+                {
+                    let err = VerifyError::from_repr(code)
+                        .ok_or(HandlerError::UnknownVerificationError)?;
+                    return Err(HandlerError::from(err));
+                }
+                return Err(HandlerError::UnknownVerificationError);
+            }
+            Err(Err(_invoke_err)) => {
+                return Err(HandlerError::UnknownVerificationError);
+            }
+        }
+
+        // Mark event as seen
+        storage::mark_event_seen(&env, &event_id);
+
+        // Save payload
+        storage::save_payload(&env, event_id, envelope.payload);
 
         Ok(())
     }
