@@ -6,43 +6,13 @@ use crate::envelope::Envelope;
 use crate::{Handler, HandlerClient, HandlerError, SignatureData};
 use alloy_primitives::FixedBytes;
 use alloy_sol_types::SolValue;
-use k256::ecdsa::SigningKey;
-use sha3::{Digest, Keccak256};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _};
 use warpdrive_security::{Security, SecurityClient};
+use warpdrive_shared::testutils::{
+    PubKey, SigningKey, compressed_pubkey, make_signing_key, sign_envelope,
+};
 use warpdrive_verification::Verification;
-
-type PubKey = BytesN<33>;
-
-fn make_signing_key(seed: u8) -> SigningKey {
-    let mut secret = [0u8; 32];
-    secret[31] = seed;
-    SigningKey::from_bytes(&secret.into()).unwrap()
-}
-
-fn compressed_pubkey(env: &Env, key: &SigningKey) -> PubKey {
-    let vk = key.verifying_key();
-    let bytes = vk.to_sec1_bytes();
-    let mut arr = [0u8; 33];
-    arr.copy_from_slice(&bytes);
-    PubKey::from_array(env, &arr)
-}
-
-fn sign_envelope(key: &SigningKey, envelope: &[u8]) -> [u8; 65] {
-    let inner_hash = Keccak256::digest(envelope);
-    let mut prefixed = std::vec::Vec::new();
-    prefixed.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
-    prefixed.extend_from_slice(&inner_hash);
-    let digest = Keccak256::digest(&prefixed);
-    let (sig, recid) = key
-        .sign_prehash_recoverable(&digest)
-        .expect("signing failed");
-    let mut result = [0u8; 65];
-    result[..64].copy_from_slice(&sig.to_bytes());
-    result[64] = recid.to_byte() + 27;
-    result
-}
 
 fn make_envelope_bytes_eth(env: &Env, event_id_seed: u8) -> Bytes {
     let mut event_id = [0u8; 20];

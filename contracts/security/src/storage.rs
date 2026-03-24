@@ -11,12 +11,19 @@ pub struct SignerInfo {
 }
 
 #[contracttype]
+#[derive(Clone)]
+pub struct Threshold {
+    pub numerator: u64,
+    pub denominator: u64,
+}
+
+#[contracttype]
 pub enum DataKey {
     Admin,
     Version,
     Signers,
-    ThresholdNumerator,
-    ThresholdDenominator,
+    Threshold,
+    TotalWeight,
 }
 
 pub fn get_admin(env: &Env) -> Address {
@@ -35,53 +42,57 @@ pub fn set_version(env: &Env, version: &String) {
     env.storage().instance().set(&DataKey::Version, version);
 }
 
-pub fn get_threshold_numerator(env: &Env) -> u64 {
-    env.storage()
-        .instance()
-        .get(&DataKey::ThresholdNumerator)
-        .unwrap()
+pub fn get_threshold(env: &Env) -> Threshold {
+    env.storage().instance().get(&DataKey::Threshold).unwrap()
 }
 
-pub fn set_threshold_numerator(env: &Env, value: u64) {
-    env.storage()
-        .instance()
-        .set(&DataKey::ThresholdNumerator, &value);
-}
-
-pub fn get_threshold_denominator(env: &Env) -> u64 {
-    env.storage()
-        .instance()
-        .get(&DataKey::ThresholdDenominator)
-        .unwrap()
-}
-
-pub fn set_threshold_denominator(env: &Env, value: u64) {
-    env.storage()
-        .instance()
-        .set(&DataKey::ThresholdDenominator, &value);
+pub fn set_threshold(env: &Env, threshold: &Threshold) {
+    env.storage().instance().set(&DataKey::Threshold, threshold);
 }
 
 pub fn init_signers(env: &Env) {
     let data = SignerMap::new(env);
     env.storage().instance().set(&DataKey::Signers, &data);
+    env.storage().instance().set(&DataKey::TotalWeight, &0u64);
+}
+
+pub fn get_total_weight(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::TotalWeight).unwrap()
+}
+
+fn set_total_weight(env: &Env, weight: u64) {
+    env.storage().instance().set(&DataKey::TotalWeight, &weight);
 }
 
 pub fn add_signer(env: &Env, key: PubKey, weight: u64) {
     let mut signers: SignerMap = env.storage().instance().get(&DataKey::Signers).unwrap();
+    let mut total = get_total_weight(env);
+
+    // If updating an existing signer, subtract the old weight first
+    if let Some(old_weight) = signers.get(key.clone()) {
+        total -= old_weight;
+    }
+
+    total = total
+        .checked_add(weight)
+        .expect("total weight would overflow u64");
+
     signers.set(key, weight);
     env.storage().instance().set(&DataKey::Signers, &signers);
+    set_total_weight(env, total);
 }
 
 pub fn remove_signer(env: &Env, key: PubKey) {
     let mut signers: SignerMap = env.storage().instance().get(&DataKey::Signers).unwrap();
-    signers.remove(key);
-    env.storage().instance().set(&DataKey::Signers, &signers);
-}
 
-// Sums all the weights of registered signers
-pub fn get_total_weight(env: &Env) -> u64 {
-    let signers: SignerMap = env.storage().instance().get(&DataKey::Signers).unwrap();
-    signers.iter().map(|(_, v)| v).sum()
+    // It it wasn't in the map before, we simplify this to a no-op
+    // QUESTION: should we return an error on the else branch?
+    if let Some(old_weight) = signers.get(key.clone()) {
+        let total = get_total_weight(env);
+        set_total_weight(env, total - old_weight);
+        signers.remove(key);
+        env.storage().instance().set(&DataKey::Signers, &signers);
+    }
 }
 
 // Returns None if signer is not registered, otherwise their weight

@@ -43,12 +43,14 @@ pub fn is_valid_signature(
     signature: &BytesN<65>,
     signer_pubkey: &PubKey,
 ) -> bool {
-    // Reject all-zero signatures
-    if signature.to_array().iter().all(|&b| b == 0) {
+    let sig_bytes = signature.to_array();
+
+    // Reject all-zero signatures explicitly. A zero signature is a known attack vector
+    // ("phantom signatures") that can trick some ECDSA recovery implementations into
+    // returning a valid-looking public key. Do not remove this check.
+    if sig_bytes.iter().all(|&b| b == 0) {
         return false;
     }
-
-    let sig_bytes = signature.to_array();
 
     // Split into r||s (64 bytes) and recovery byte v
     let mut rs = [0u8; 64];

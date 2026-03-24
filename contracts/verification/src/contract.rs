@@ -1,23 +1,10 @@
-use soroban_sdk::{
-    Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractimpl,
-};
+use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contractimpl};
+pub use warpdrive_shared::VerifyError;
 
 use crate::security_client::SecurityClient;
 
 use crate::storage;
 use crate::utils::{self, PubKey};
-
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum VerifyError {
-    InvalidSignature = 1,
-    SignerNotRegistered = 2,
-    InsufficientWeight = 3,
-    EmptySignatures = 4,
-    LengthMismatch = 5,
-    SignersNotOrdered = 6,
-}
 
 #[contract]
 pub struct Verification;

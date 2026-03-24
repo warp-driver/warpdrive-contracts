@@ -14,13 +14,11 @@ crate-type = ["cdylib", "rlib"]
 soroban-sdk = { workspace = true, features = ["alloc"] }
 alloy-sol-types = { version = "1", default-features = false }
 alloy-primitives = { version = "1", default-features = false }
-enum-repr = "0.2.6"
+warpdrive-shared = { path = "../shared" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 warpdrive-security = { path = "../security" }
 warpdrive-verification = { path = "../verification" }
-k256 = { version = "0.13.4", features = ["ecdsa"] }
-sha3 = "0.10.8"
+warpdrive-shared = { path = "../shared", features = ["testutils"] }
 hex-literal = "0.4.1"
-

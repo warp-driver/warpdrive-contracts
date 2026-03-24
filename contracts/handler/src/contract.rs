@@ -30,7 +30,7 @@ pub enum HandlerError {
 
     // Some numbers intentionally skipped...
     UnknownVerificationError = 20,
-    // Copied from VerifyError
+    // Mapped from VerifyError
     InvalidSignature = 21,
     SignerNotRegistered = 22,
     InsufficientWeight = 23,
@@ -49,6 +49,31 @@ impl From<VerifyError> for HandlerError {
             VerifyError::LengthMismatch => HandlerError::LengthMismatch,
             VerifyError::SignersNotOrdered => HandlerError::SignersNotOrdered,
         }
+    }
+}
+
+/// Maps a `try_verify` result from the verification contract into a `HandlerError`.
+fn map_verify_result(
+    res: Result<
+        Result<(), soroban_sdk::ConversionError>,
+        Result<soroban_sdk::Error, soroban_sdk::InvokeError>,
+    >,
+) -> Result<(), HandlerError> {
+    match res {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(_conversion)) => Err(HandlerError::UnknownVerificationError),
+        Err(Ok(e)) => {
+            if let Ok(soroban_sdk::xdr::ScError::Contract(code)) =
+                soroban_sdk::xdr::ScError::try_from(e)
+            {
+                let err =
+                    VerifyError::from_repr(code).ok_or(HandlerError::UnknownVerificationError)?;
+                Err(HandlerError::from(err))
+            } else {
+                Err(HandlerError::UnknownVerificationError)
+            }
+        }
+        Err(Err(_invoke_err)) => Err(HandlerError::UnknownVerificationError),
     }
 }
 
@@ -105,28 +130,11 @@ impl Handler {
             return Err(HandlerError::EventAlreadySeen);
         }
 
-        // Verify signatures via the verification contract.
-        // Errors from the verification contract propagate directly as contract errors.
+        // Verify signatures via the verification contract
         let verification_addr = storage::get_verification_contract(&env);
         let verification = VerificationClient::new(&env, &verification_addr);
         let res = verification.try_verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
-        match res {
-            Ok(_) => {}
-            Err(Ok(e)) => {
-                // Contract error from verification contract — extract the error code
-                if let Ok(soroban_sdk::xdr::ScError::Contract(code)) =
-                    soroban_sdk::xdr::ScError::try_from(e)
-                {
-                    let err = VerifyError::from_repr(code)
-                        .ok_or(HandlerError::UnknownVerificationError)?;
-                    return Err(HandlerError::from(err));
-                }
-                return Err(HandlerError::UnknownVerificationError);
-            }
-            Err(Err(_invoke_err)) => {
-                return Err(HandlerError::UnknownVerificationError);
-            }
-        }
+        map_verify_result(res)?;
 
         // Mark event as seen
         storage::mark_event_seen(&env, &event_id);
@@ -160,23 +168,7 @@ impl Handler {
         let verification_addr = storage::get_verification_contract(&env);
         let verification = VerificationClient::new(&env, &verification_addr);
         let res = verification.try_verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
-        match res {
-            Ok(_) => {}
-            Err(Ok(e)) => {
-                // Contract error from verification contract — extract the error code
-                if let Ok(soroban_sdk::xdr::ScError::Contract(code)) =
-                    soroban_sdk::xdr::ScError::try_from(e)
-                {
-                    let err = VerifyError::from_repr(code)
-                        .ok_or(HandlerError::UnknownVerificationError)?;
-                    return Err(HandlerError::from(err));
-                }
-                return Err(HandlerError::UnknownVerificationError);
-            }
-            Err(Err(_invoke_err)) => {
-                return Err(HandlerError::UnknownVerificationError);
-            }
-        }
+        map_verify_result(res)?;
 
         // Mark event as seen
         storage::mark_event_seen(&env, &event_id);

@@ -1,6 +1,6 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec, contract, contractimpl};
 
-use crate::storage::{self, PubKey, SignerInfo};
+use crate::storage::{self, PubKey, SignerInfo, Threshold};
 
 #[contract]
 pub struct Security;
@@ -21,8 +21,13 @@ impl Security {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::init_signers(&env);
-        storage::set_threshold_numerator(&env, threshold_numerator);
-        storage::set_threshold_denominator(&env, threshold_denominator);
+        storage::set_threshold(
+            &env,
+            &Threshold {
+                numerator: threshold_numerator,
+                denominator: threshold_denominator,
+            },
+        );
     }
 
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
@@ -43,11 +48,6 @@ impl Security {
 
     pub fn add_signer(env: Env, key: PubKey, weight: u64) {
         storage::get_admin(&env).require_auth();
-        // Verify that adding this weight won't overflow u64
-        let current_total = storage::get_total_weight(&env);
-        current_total
-            .checked_add(weight)
-            .expect("total weight would overflow u64");
         storage::add_signer(&env, key, weight);
     }
 
@@ -72,22 +72,26 @@ impl Security {
         storage::get_admin(&env).require_auth();
         assert!(denominator > 0, "denominator must be > 0");
         assert!(numerator <= denominator, "numerator must be <= denominator");
-        storage::set_threshold_numerator(&env, numerator);
-        storage::set_threshold_denominator(&env, denominator);
+        storage::set_threshold(
+            &env,
+            &Threshold {
+                numerator,
+                denominator,
+            },
+        );
     }
 
     pub fn threshold_numerator(env: Env) -> u64 {
-        storage::get_threshold_numerator(&env)
+        storage::get_threshold(&env).numerator
     }
 
     pub fn threshold_denominator(env: Env) -> u64 {
-        storage::get_threshold_denominator(&env)
+        storage::get_threshold(&env).denominator
     }
 
     pub fn required_weight(env: Env) -> u64 {
         let total = storage::get_total_weight(&env);
-        let numerator = storage::get_threshold_numerator(&env);
-        let denominator = storage::get_threshold_denominator(&env);
-        ((total as u128) * (numerator as u128) / (denominator as u128)) as u64
+        let threshold = storage::get_threshold(&env);
+        ((total as u128) * (threshold.numerator as u128) / (threshold.denominator as u128)) as u64
     }
 }
