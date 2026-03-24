@@ -20,7 +20,6 @@ impl Security {
         );
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
-        storage::init_signers(&env);
         storage::set_threshold(
             &env,
             &Threshold {
