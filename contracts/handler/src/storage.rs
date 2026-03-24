@@ -1,15 +1,14 @@
-use soroban_sdk::{Address, Bytes, BytesN, Env, Map, String, contracttype};
+use soroban_sdk::{Address, Bytes, BytesN, Env, String, contracttype};
 
 #[contracttype]
 pub enum DataKey {
     Admin,
     Version,
     VerificationContract,
+    // Use unique keys like this, not Map, as Map requires loading all data into memory on load, and these are potentially unbounded.
     EventSeen(BytesN<20>),
-    Payload,
+    Payload(BytesN<20>),
 }
-
-type PayloadMap = Map<BytesN<20>, Bytes>;
 
 pub fn get_admin(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Admin).unwrap()
@@ -52,18 +51,12 @@ pub fn mark_event_seen(env: &Env, event_id: &BytesN<20>) {
         .set(&DataKey::EventSeen(event_id.clone()), &true);
 }
 
-pub fn init_payloads(env: &Env) {
-    let data = PayloadMap::new(env);
-    env.storage().persistent().set(&DataKey::Payload, &data);
-}
-
 pub fn save_payload(env: &Env, event_id: BytesN<20>, payload: Bytes) {
-    let mut payloads: PayloadMap = env.storage().persistent().get(&DataKey::Payload).unwrap();
-    payloads.set(event_id, payload);
-    env.storage().persistent().set(&DataKey::Payload, &payloads);
+    env.storage()
+        .persistent()
+        .set(&DataKey::Payload(event_id), &payload);
 }
 
 pub fn get_payload(env: &Env, event_id: BytesN<20>) -> Option<Bytes> {
-    let payloads: PayloadMap = env.storage().persistent().get(&DataKey::Payload).unwrap();
-    payloads.get(event_id)
+    env.storage().persistent().get(&DataKey::Payload(event_id))
 }

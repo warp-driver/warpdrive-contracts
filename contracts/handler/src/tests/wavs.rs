@@ -87,7 +87,7 @@ fn test_verify_success_ex1() {
     // check it was parsed properly into event_id and payload
     let event_id = BytesN::from_array(&env, &EVENT_ID);
     let payload = Bytes::from_array(&env, &PAYLOAD);
-    assert_eq!(client.payload(&event_id), payload,);
+    assert_eq!(client.payload(&event_id), Some(payload));
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn test_verify_success_ex2() {
     // check it was parsed properly into event_id and payload
     let event_id = BytesN::from_array(&env, &EVENT_ID);
     let payload = Bytes::from_array(&env, &PAYLOAD);
-    assert_eq!(client.payload(&event_id), payload,);
+    assert_eq!(client.payload(&event_id), Some(payload));
 }
 
 // We provide pubkey from example 1 and signature from example 2. Both are valid, but don't match

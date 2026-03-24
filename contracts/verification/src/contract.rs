@@ -60,12 +60,14 @@ impl Verification {
         SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
     }
 
-    pub fn verify_one(
+    /// Checks a single signature and returns the signer's weight if valid.
+    /// Does NOT check against the threshold — use `verify` for full multi-sig validation.
+    pub fn check_one(
         env: Env,
         envelope: Bytes,
         signature: BytesN<65>,
         signer_pubkey: PubKey,
-    ) -> Result<(), VerifyError> {
+    ) -> Result<u64, VerifyError> {
         // 1. Verify the cryptographic signature
         if !utils::is_valid_signature(&env, &envelope, &signature, &signer_pubkey) {
             return Err(VerifyError::InvalidSignature);
@@ -80,13 +82,7 @@ impl Verification {
             return Err(VerifyError::SignerNotRegistered);
         }
 
-        // 3. Check if signer's weight meets the required threshold
-        let required = security.required_weight();
-        if weight < required {
-            return Err(VerifyError::InsufficientWeight);
-        }
-
-        Ok(())
+        Ok(weight)
     }
 
     pub fn verify(
@@ -130,7 +126,7 @@ impl Verification {
                 return Err(VerifyError::SignerNotRegistered);
             }
 
-            total_weight += weight;
+            total_weight = total_weight.checked_add(weight).expect("weight overflow");
         }
 
         let required = security.required_weight();

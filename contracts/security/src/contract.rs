@@ -13,6 +13,11 @@ impl Security {
         threshold_numerator: u64,
         threshold_denominator: u64,
     ) {
+        assert!(threshold_denominator > 0, "denominator must be > 0");
+        assert!(
+            threshold_numerator <= threshold_denominator,
+            "numerator must be <= denominator"
+        );
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::init_signers(&env);
@@ -38,6 +43,11 @@ impl Security {
 
     pub fn add_signer(env: Env, key: PubKey, weight: u64) {
         storage::get_admin(&env).require_auth();
+        // Verify that adding this weight won't overflow u64
+        let current_total = storage::get_total_weight(&env);
+        current_total
+            .checked_add(weight)
+            .expect("total weight would overflow u64");
         storage::add_signer(&env, key, weight);
     }
 
@@ -60,6 +70,8 @@ impl Security {
 
     pub fn set_threshold(env: Env, numerator: u64, denominator: u64) {
         storage::get_admin(&env).require_auth();
+        assert!(denominator > 0, "denominator must be > 0");
+        assert!(numerator <= denominator, "numerator must be <= denominator");
         storage::set_threshold_numerator(&env, numerator);
         storage::set_threshold_denominator(&env, denominator);
     }
@@ -76,6 +88,6 @@ impl Security {
         let total = storage::get_total_weight(&env);
         let numerator = storage::get_threshold_numerator(&env);
         let denominator = storage::get_threshold_denominator(&env);
-        total * numerator / denominator
+        ((total as u128) * (numerator as u128) / (denominator as u128)) as u64
     }
 }

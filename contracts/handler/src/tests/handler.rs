@@ -149,7 +149,7 @@ fn test_verify_success() {
 
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 }
 
@@ -166,7 +166,7 @@ fn test_verify_success_combined_weight() {
 
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 }
 
@@ -186,7 +186,7 @@ fn test_verify_duplicate_event_fails() {
     // Payload was saved on first call
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 
     // Same event_id again
@@ -207,7 +207,7 @@ fn test_verify_different_events_succeed() {
     assert_eq!(client.try_verify_eth(&env1, &sig1), Ok(Ok(())));
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 
     assert_eq!(
@@ -217,7 +217,7 @@ fn test_verify_different_events_succeed() {
     assert_eq!(client.try_verify_eth(&env2, &sig2), Ok(Ok(())));
     assert_eq!(
         client.payload(&expected_event_id(&env, 2)),
-        expected_payload(&env, 2)
+        Some(expected_payload(&env, 2))
     );
 }
 
@@ -247,7 +247,7 @@ fn test_verify_invalid_signature_fails() {
     );
 
     // Payload should not be saved on failure
-    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
+    assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn test_verify_insufficient_weight_fails() {
     );
 
     // Payload should not be saved on failure
-    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
+    assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
 /********************** XLM VARIANT *******************/
@@ -286,7 +286,7 @@ fn test_verify_success_xlm() {
 
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 }
 
@@ -303,7 +303,7 @@ fn test_verify_success_combined_weight_xlm() {
 
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 }
 
@@ -323,7 +323,7 @@ fn test_verify_duplicate_event_fails_xlm() {
     // Payload was saved on first call
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 
     // Same event_id again
@@ -344,7 +344,7 @@ fn test_verify_different_events_succeed_xlm() {
     assert_eq!(client.try_verify_xlm(&env1, &sig1), Ok(Ok(())));
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 
     assert_eq!(
@@ -354,7 +354,7 @@ fn test_verify_different_events_succeed_xlm() {
     assert_eq!(client.try_verify_xlm(&env2, &sig2), Ok(Ok(())));
     assert_eq!(
         client.payload(&expected_event_id(&env, 2)),
-        expected_payload(&env, 2)
+        Some(expected_payload(&env, 2))
     );
 }
 
@@ -384,7 +384,7 @@ fn test_verify_invalid_signature_fails_xlm() {
     );
 
     // Payload should not be saved on failure
-    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
+    assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
 #[test]
@@ -402,7 +402,7 @@ fn test_verify_insufficient_weight_fails_xlm() {
     );
 
     // Payload should not be saved on failure
-    assert!(client.try_payload(&expected_event_id(&env, 1)).is_err());
+    assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
 /********************* XLM vs ETH **************************/
@@ -428,7 +428,7 @@ fn test_eth_refuses_xlm_packets() {
 
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 }
 
@@ -453,6 +453,6 @@ fn test_xlm_refuses_eth_packets() {
 
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
-        expected_payload(&env, 1)
+        Some(expected_payload(&env, 1))
     );
 }

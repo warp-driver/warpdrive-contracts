@@ -61,7 +61,6 @@ impl Handler {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_verification_contract(&env, &verification_contract);
-        storage::init_payloads(&env);
     }
 
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
@@ -84,11 +83,14 @@ impl Handler {
         storage::get_verification_contract(&env)
     }
 
-    pub fn payload(env: Env, event_id: BytesN<20>) -> Bytes {
-        storage::get_payload(&env, event_id).unwrap()
+    pub fn payload(env: Env, event_id: BytesN<20>) -> Option<Bytes> {
+        storage::get_payload(&env, event_id)
     }
 
-    /// This verifies the packet, assuming the envelope is abi-encoded (Ethereum format) for compatibility
+    /// Verifies the packet, assuming the envelope is ABI-encoded (Ethereum format) for compatibility.
+    ///
+    /// No caller authorization is required — this is intentional. Security is enforced entirely
+    /// through cryptographic signature verification of the envelope contents.
     pub fn verify_eth(
         env: Env,
         envelope_bytes: Bytes,
@@ -136,7 +138,10 @@ impl Handler {
         Ok(())
     }
 
-    /// This verifies the packet, assuming the envelope is XDR-encoded (Soroban native format)
+    /// Verifies the packet, assuming the envelope is XDR-encoded (Soroban native format).
+    ///
+    /// No caller authorization is required — this is intentional. Security is enforced entirely
+    /// through cryptographic signature verification of the envelope contents.
     pub fn verify_xlm(
         env: Env,
         envelope_bytes: Bytes,

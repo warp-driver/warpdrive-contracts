@@ -126,7 +126,7 @@ fn test_verify_invalid_signature() {
     // Garbage signature — not valid for any message
     let bad_sig = BytesN::from_array(&env, &[0xAA; 65]);
 
-    let result = verification.try_verify_one(&envelope, &bad_sig, &pubkey2);
+    let result = verification.try_check_one(&envelope, &bad_sig, &pubkey2);
     assert_eq!(result, Err(Ok(VerifyError::InvalidSignature)));
 }
 
@@ -144,13 +144,13 @@ fn test_verify_success_high_weight() {
     let envelope = Bytes::from_slice(&env, message);
     let signature = BytesN::from_array(&env, &sig_bytes);
 
-    // key2 has weight 200 >= required 165, should succeed
-    let result = verification.try_verify_one(&envelope, &signature, &pubkey2);
-    assert_eq!(result, Ok(Ok(())));
+    // key2 has weight 200, should succeed and return the weight
+    let result = verification.try_check_one(&envelope, &signature, &pubkey2);
+    assert_eq!(result, Ok(Ok(200)));
 }
 
 #[test]
-fn test_verify_insufficient_weight() {
+fn test_check_one_returns_weight() {
     let env = Env::default();
     let (verification, _security) = setup_contracts(&env);
 
@@ -163,9 +163,9 @@ fn test_verify_insufficient_weight() {
     let envelope = Bytes::from_slice(&env, message);
     let signature = BytesN::from_array(&env, &sig_bytes);
 
-    // key1 has weight 100 < required 165
-    let result = verification.try_verify_one(&envelope, &signature, &pubkey1);
-    assert_eq!(result, Err(Ok(VerifyError::InsufficientWeight)));
+    // key1 has weight 100 — check_one returns it without threshold comparison
+    let result = verification.try_check_one(&envelope, &signature, &pubkey1);
+    assert_eq!(result, Ok(Ok(100)));
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn test_verify_signer_not_registered() {
     let signature = BytesN::from_array(&env, &sig_bytes);
 
     // key3 is not registered in the security contract
-    let result = verification.try_verify_one(&envelope, &signature, &pubkey3);
+    let result = verification.try_check_one(&envelope, &signature, &pubkey3);
     assert_eq!(result, Err(Ok(VerifyError::SignerNotRegistered)));
 }
 
