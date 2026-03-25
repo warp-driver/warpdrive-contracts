@@ -90,7 +90,7 @@ fn test_verify_invalid_signature() {
     // Garbage signature — not valid for any message
     let bad_sig = BytesN::from_array(&env, &[0xAA; 65]);
 
-    let result = verification.try_check_one(&envelope, &bad_sig, &pubkey2);
+    let result = verification.try_check_one(&envelope, &bad_sig, &pubkey2, &None);
     assert_eq!(result, Err(Ok(VerifyError::InvalidSignature)));
 }
 
@@ -109,7 +109,7 @@ fn test_verify_success_high_weight() {
     let signature = BytesN::from_array(&env, &sig_bytes);
 
     // key2 has weight 200, should succeed and return the weight
-    let result = verification.try_check_one(&envelope, &signature, &pubkey2);
+    let result = verification.try_check_one(&envelope, &signature, &pubkey2, &None);
     assert_eq!(result, Ok(Ok(200)));
 }
 
@@ -128,7 +128,7 @@ fn test_check_one_returns_weight() {
     let signature = BytesN::from_array(&env, &sig_bytes);
 
     // key1 has weight 100 — check_one returns it without threshold comparison
-    let result = verification.try_check_one(&envelope, &signature, &pubkey1);
+    let result = verification.try_check_one(&envelope, &signature, &pubkey1, &None);
     assert_eq!(result, Ok(Ok(100)));
 }
 
@@ -147,8 +147,50 @@ fn test_verify_signer_not_registered() {
     let signature = BytesN::from_array(&env, &sig_bytes);
 
     // key3 is not registered in the security contract
-    let result = verification.try_check_one(&envelope, &signature, &pubkey3);
+    let result = verification.try_check_one(&envelope, &signature, &pubkey3, &None);
     assert_eq!(result, Err(Ok(VerifyError::SignerNotRegistered)));
+}
+
+#[test]
+fn test_check_one_with_reference_block() {
+    let env = Env::default();
+    let admin = soroban_sdk::Address::generate(&env);
+
+    let key1 = make_signing_key(1);
+    let pk1 = compressed_pubkey(&env, &key1);
+
+    // Ledger 100: key1 weight 100
+    env.ledger().with_mut(|li| li.sequence_number = 100);
+    let security_id = env.register(Security, (&admin, 55u64, 100u64));
+    let security = SecurityClient::new(&env, &security_id);
+    security.mock_all_auths().add_signer(&pk1, &100);
+
+    let verification_id = env.register(Verification, (&admin, &security_id));
+    let verification = VerificationClient::new(&env, &verification_id);
+
+    // Ledger 150: update key1 weight to 250
+    env.ledger().with_mut(|li| li.sequence_number = 150);
+    security.mock_all_auths().add_signer(&pk1, &250);
+
+    // Advance to ledger 200
+    env.ledger().with_mut(|li| li.sequence_number = 200);
+
+    let message = b"hello world";
+    let sig_bytes = sign_envelope(&key1, message);
+    let envelope = Bytes::from_slice(&env, message);
+    let signature = BytesN::from_array(&env, &sig_bytes);
+
+    // None => current weight (250)
+    let result = verification.try_check_one(&envelope, &signature, &pk1, &None);
+    assert_eq!(result, Ok(Ok(250)));
+
+    // Some(100) => historical weight at ledger 100 (100)
+    let result = verification.try_check_one(&envelope, &signature, &pk1, &Some(100));
+    assert_eq!(result, Ok(Ok(100)));
+
+    // Some(150) => historical weight at ledger 150 (250)
+    let result = verification.try_check_one(&envelope, &signature, &pk1, &Some(150));
+    assert_eq!(result, Ok(Ok(250)));
 }
 
 // ── verify (multi-sig) tests ────────────────────────────────────────

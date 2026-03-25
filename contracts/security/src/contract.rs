@@ -1,6 +1,17 @@
-use soroban_sdk::{Address, BytesN, Env, String, Vec, contract, contractimpl};
+use enum_repr::EnumRepr;
+use soroban_sdk::{Address, BytesN, Env, String, Vec, contract, contracterror, contractimpl};
 
 use crate::storage::{self, PubKey, SignerInfo, Threshold};
+
+#[contracterror]
+#[EnumRepr(type = "u32")]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum SecurityError {
+    ZeroDenominator = 1,
+    NumeratorExceedsDenominator = 2,
+    ZeroNumerator = 3,
+    ZeroWeight = 4,
+}
 
 #[contract]
 pub struct Security;
@@ -14,6 +25,7 @@ impl Security {
         threshold_denominator: u64,
     ) {
         assert!(threshold_denominator > 0, "denominator must be > 0");
+        assert!(threshold_numerator > 0, "numerator must be > 0");
         assert!(
             threshold_numerator <= threshold_denominator,
             "numerator must be <= denominator"
@@ -45,9 +57,13 @@ impl Security {
         storage::get_version(&env)
     }
 
-    pub fn add_signer(env: Env, key: PubKey, weight: u64) {
+    pub fn add_signer(env: Env, key: PubKey, weight: u64) -> Result<(), SecurityError> {
         storage::get_admin(&env).require_auth();
+        if weight == 0 {
+            return Err(SecurityError::ZeroWeight);
+        }
         storage::add_signer(&env, key, weight);
+        Ok(())
     }
 
     pub fn remove_signer(env: Env, key: PubKey) {
@@ -89,10 +105,21 @@ impl Security {
         storage::list_signers(&env)
     }
 
-    pub fn set_threshold(env: Env, numerator: u64, denominator: u64) {
+    pub fn set_threshold(
+        env: Env,
+        numerator: u64,
+        denominator: u64,
+    ) -> Result<(), SecurityError> {
         storage::get_admin(&env).require_auth();
-        assert!(denominator > 0, "denominator must be > 0");
-        assert!(numerator <= denominator, "numerator must be <= denominator");
+        if denominator == 0 {
+            return Err(SecurityError::ZeroDenominator);
+        }
+        if numerator == 0 {
+            return Err(SecurityError::ZeroNumerator);
+        }
+        if numerator > denominator {
+            return Err(SecurityError::NumeratorExceedsDenominator);
+        }
         storage::set_threshold(
             &env,
             &Threshold {
@@ -100,6 +127,7 @@ impl Security {
                 denominator,
             },
         );
+        Ok(())
     }
 
     pub fn threshold_numerator(env: Env) -> u64 {

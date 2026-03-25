@@ -49,11 +49,15 @@ impl Verification {
 
     /// Checks a single signature and returns the signer's weight if valid.
     /// Does NOT check against the threshold — use `verify` for full multi-sig validation.
+    ///
+    /// When `reference_block` is `None`, uses the current signer weight.
+    /// When `Some(block)`, uses the historical weight at that ledger.
     pub fn check_one(
         env: Env,
         envelope: Bytes,
         signature: BytesN<65>,
         signer_pubkey: PubKey,
+        reference_block: Option<u32>,
     ) -> Result<u64, VerifyError> {
         if !utils::is_valid_signature(&env, &envelope, &signature, &signer_pubkey) {
             return Err(VerifyError::InvalidSignature);
@@ -62,7 +66,10 @@ impl Verification {
         let security_addr = storage::get_security_contract(&env);
         let security = SecurityClient::new(&env, &security_addr);
 
-        let weight = security.get_signer_weight(&signer_pubkey);
+        let weight = match reference_block {
+            Some(block) => security.get_signer_weight_at(&signer_pubkey, &block),
+            None => security.get_signer_weight(&signer_pubkey),
+        };
         if weight == 0 {
             return Err(VerifyError::SignerNotRegistered);
         }

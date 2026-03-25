@@ -1,3 +1,4 @@
+use enum_repr::EnumRepr;
 use soroban_sdk::{
     Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractimpl, contracttype,
     xdr::FromXdr,
@@ -25,8 +26,8 @@ pub struct XlmEnvelope {
 }
 
 #[contracterror]
+#[EnumRepr(type = "u32")]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
 pub enum HandlerError {
     // Errors from the handler itself
     EventAlreadySeen = 1,

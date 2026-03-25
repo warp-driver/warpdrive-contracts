@@ -1909,6 +1909,7 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
+ "enum-repr",
  "hex-literal",
  "soroban-sdk",
  "warpdrive-security",
@@ -1927,6 +1928,7 @@ dependencies = [
 name = "warpdrive-security"
 version = "0.1.0"
 dependencies = [
+ "enum-repr",
  "soroban-sdk",
  "warpdrive-shared",
 ]
