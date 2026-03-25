@@ -55,12 +55,10 @@ impl Verification {
         signature: BytesN<65>,
         signer_pubkey: PubKey,
     ) -> Result<u64, VerifyError> {
-        // 1. Verify the cryptographic signature
         if !utils::is_valid_signature(&env, &envelope, &signature, &signer_pubkey) {
             return Err(VerifyError::InvalidSignature);
         }
 
-        // 2. Check signer is registered in the security contract
         let security_addr = storage::get_security_contract(&env);
         let security = SecurityClient::new(&env, &security_addr);
 
@@ -77,6 +75,7 @@ impl Verification {
         envelope: Bytes,
         signatures: Vec<BytesN<65>>,
         signer_pubkeys: Vec<PubKey>,
+        reference_block: u32,
     ) -> Result<(), VerifyError> {
         if signatures.is_empty() {
             return Err(VerifyError::EmptySignatures);
@@ -108,7 +107,7 @@ impl Verification {
                 return Err(VerifyError::InvalidSignature);
             }
 
-            let weight = security.get_signer_weight(&pubkey);
+            let weight = security.get_signer_weight_at(&pubkey, &reference_block);
             if weight == 0 {
                 return Err(VerifyError::SignerNotRegistered);
             }
@@ -116,7 +115,7 @@ impl Verification {
             total_weight = total_weight.checked_add(weight).expect("weight overflow");
         }
 
-        let required = security.required_weight();
+        let required = security.required_weight_at(&reference_block);
         if total_weight < required {
             return Err(VerifyError::InsufficientWeight);
         }

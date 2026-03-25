@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod checkpoint;
+
 mod errors;
 pub use errors::VerifyError;
 

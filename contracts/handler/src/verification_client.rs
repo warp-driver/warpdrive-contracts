@@ -6,5 +6,11 @@ type PubKey = BytesN<33>;
 #[contractclient(name = "VerificationClient")]
 #[allow(dead_code)]
 pub trait VerificationInterface {
-    fn verify(env: Env, envelope: Bytes, signatures: Vec<BytesN<65>>, signer_pubkeys: Vec<PubKey>);
+    fn verify(
+        env: Env,
+        envelope: Bytes,
+        signatures: Vec<BytesN<65>>,
+        signer_pubkeys: Vec<PubKey>,
+        reference_block: u32,
+    );
 }

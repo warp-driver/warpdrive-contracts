@@ -7,6 +7,9 @@ use crate::envelope::Envelope as EthEnvelope;
 use crate::storage;
 use crate::verification_client::{VerificationClient, VerifyError};
 
+/// Maximum age (in ledgers) allowed for a reference block.
+const MAX_REFERENCE_BLOCK_AGE: u32 = 200;
+
 #[contracttype]
 pub struct SignatureData {
     pub signers: Vec<BytesN<33>>,
@@ -27,6 +30,7 @@ pub struct XlmEnvelope {
 pub enum HandlerError {
     // Errors from the handler itself
     EventAlreadySeen = 1,
+    InvalidReferenceBlock = 2,
 
     // Some numbers intentionally skipped...
     UnknownVerificationError = 20,
@@ -50,6 +54,18 @@ impl From<VerifyError> for HandlerError {
             VerifyError::SignersNotOrdered => HandlerError::SignersNotOrdered,
         }
     }
+}
+
+/// Validates that `reference_block` is strictly in the past and within the allowed age window.
+fn validate_reference_block(env: &Env, reference_block: u32) -> Result<(), HandlerError> {
+    let current = env.ledger().sequence();
+    if reference_block >= current {
+        return Err(HandlerError::InvalidReferenceBlock);
+    }
+    if current - reference_block > MAX_REFERENCE_BLOCK_AGE {
+        return Err(HandlerError::InvalidReferenceBlock);
+    }
+    Ok(())
 }
 
 /// Maps a `try_verify` result from the verification contract into a `HandlerError`.
@@ -121,6 +137,8 @@ impl Handler {
         envelope_bytes: Bytes,
         sig_data: SignatureData,
     ) -> Result<(), HandlerError> {
+        validate_reference_block(&env, sig_data.reference_block)?;
+
         // Parse the ABI-encoded envelope
         let envelope = EthEnvelope::abi_decode_from(&envelope_bytes);
         let event_id = BytesN::from_array(&env, &envelope.eventId.0);
@@ -133,7 +151,12 @@ impl Handler {
         // Verify signatures via the verification contract
         let verification_addr = storage::get_verification_contract(&env);
         let verification = VerificationClient::new(&env, &verification_addr);
-        let res = verification.try_verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
+        let res = verification.try_verify(
+            &envelope_bytes,
+            &sig_data.signatures,
+            &sig_data.signers,
+            &sig_data.reference_block,
+        );
         map_verify_result(res)?;
 
         // Mark event as seen
@@ -155,6 +178,8 @@ impl Handler {
         envelope_bytes: Bytes,
         sig_data: SignatureData,
     ) -> Result<(), HandlerError> {
+        validate_reference_block(&env, sig_data.reference_block)?;
+
         // Parse XDR bytes into the typed envelope
         let envelope = XlmEnvelope::from_xdr(&env, &envelope_bytes).expect("invalid XLM envelope");
         let event_id = envelope.event_id;
@@ -167,7 +192,12 @@ impl Handler {
         // Verify signatures against the raw envelope bytes (what was actually signed)
         let verification_addr = storage::get_verification_contract(&env);
         let verification = VerificationClient::new(&env, &verification_addr);
-        let res = verification.try_verify(&envelope_bytes, &sig_data.signatures, &sig_data.signers);
+        let res = verification.try_verify(
+            &envelope_bytes,
+            &sig_data.signatures,
+            &sig_data.signers,
+            &sig_data.reference_block,
+        );
         map_verify_result(res)?;
 
         // Mark event as seen

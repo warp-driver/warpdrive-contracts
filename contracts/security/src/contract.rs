@@ -63,6 +63,20 @@ impl Security {
         storage::get_signer_weight(&env, key).unwrap_or(0)
     }
 
+    pub fn get_signer_weight_at(env: Env, key: PubKey, reference_block: u32) -> u64 {
+        storage::get_signer_weight_at(&env, key, reference_block)
+    }
+
+    pub fn get_total_weight_at(env: Env, reference_block: u32) -> u64 {
+        storage::get_total_weight_at(&env, reference_block)
+    }
+
+    pub fn required_weight_at(env: Env, reference_block: u32) -> u64 {
+        let total = storage::get_total_weight_at(&env, reference_block);
+        let threshold = storage::get_threshold(&env);
+        ((total as u128) * (threshold.numerator as u128) / (threshold.denominator as u128)) as u64
+    }
+
     pub fn list_signers(env: Env) -> Vec<SignerInfo> {
         storage::list_signers(&env)
     }

@@ -3,7 +3,7 @@
 
 use crate::{Handler, HandlerClient, HandlerError, SignatureData};
 use hex_literal::hex;
-use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _};
+use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_security::{Security, SecurityClient};
 use warpdrive_verification::Verification;
 
@@ -45,6 +45,8 @@ const EVENT_ID: [u8; 20] = hex!("0101010101010101010101010101010101010101");
 // const ORDERING: [u8; 12] = hex!("000000000000000000000000");
 const PAYLOAD: [u8; 3] = hex!("010203");
 
+const TEST_REF_BLOCK: u32 = 10;
+
 type PubKey = BytesN<33>;
 
 fn setup_handler_with_signer<'a>(env: &'a Env, pubkey: &[u8; 33]) -> HandlerClient<'a> {
@@ -52,12 +54,16 @@ fn setup_handler_with_signer<'a>(env: &'a Env, pubkey: &[u8; 33]) -> HandlerClie
 
     let pk = PubKey::from_array(env, pubkey);
 
+    env.ledger().set_sequence_number(TEST_REF_BLOCK);
+
     let security_id = env.register(Security, (&admin, 55u64, 100u64));
     let security = SecurityClient::new(env, &security_id);
     security.mock_all_auths().add_signer(&pk, &100);
 
     let verification_id = env.register(Verification, (&admin, &security_id));
     let handler_id = env.register(Handler, (&admin, &verification_id));
+
+    env.ledger().set_sequence_number(100);
 
     HandlerClient::new(env, &handler_id)
 }
@@ -67,7 +73,6 @@ fn test_verify_success_ex1() {
     let env = Env::default();
     let client = setup_handler_with_signer(&env, &ex1::PUB_KEY);
 
-    // Construct the signature data argument
     let mut signers: Vec<PubKey> = Vec::new(&env);
     signers.push_front(PubKey::from_array(&env, &ex1::PUB_KEY));
 
@@ -77,14 +82,12 @@ fn test_verify_success_ex1() {
     let sig_data = SignatureData {
         signers,
         signatures,
-        reference_block: 0,
+        reference_block: TEST_REF_BLOCK,
     };
 
-    // ensure it passes the signature checks
     let result = client.try_verify_eth(&Bytes::from_array(&env, &ENVELOPE), &sig_data);
     assert_eq!(result, Ok(Ok(())));
 
-    // check it was parsed properly into event_id and payload
     let event_id = BytesN::from_array(&env, &EVENT_ID);
     let payload = Bytes::from_array(&env, &PAYLOAD);
     assert_eq!(client.payload(&event_id), Some(payload));
@@ -95,7 +98,6 @@ fn test_verify_success_ex2() {
     let env = Env::default();
     let client = setup_handler_with_signer(&env, &ex2::PUB_KEY);
 
-    // Construct the signature data argument
     let mut signers: Vec<PubKey> = Vec::new(&env);
     signers.push_front(PubKey::from_array(&env, &ex2::PUB_KEY));
 
@@ -105,26 +107,22 @@ fn test_verify_success_ex2() {
     let sig_data = SignatureData {
         signers,
         signatures,
-        reference_block: 0,
+        reference_block: TEST_REF_BLOCK,
     };
 
-    // ensure it passes the signature checks
     let result = client.try_verify_eth(&Bytes::from_array(&env, &ENVELOPE), &sig_data);
     assert_eq!(result, Ok(Ok(())));
 
-    // check it was parsed properly into event_id and payload
     let event_id = BytesN::from_array(&env, &EVENT_ID);
     let payload = Bytes::from_array(&env, &PAYLOAD);
     assert_eq!(client.payload(&event_id), Some(payload));
 }
 
-// We provide pubkey from example 1 and signature from example 2. Both are valid, but don't match
 #[test]
 fn test_fail_wrong_signer() {
     let env = Env::default();
     let client = setup_handler_with_signer(&env, &ex1::PUB_KEY);
 
-    // Construct the signature data argument
     let mut signers: Vec<PubKey> = Vec::new(&env);
     signers.push_front(PubKey::from_array(&env, &ex1::PUB_KEY));
 
@@ -134,10 +132,9 @@ fn test_fail_wrong_signer() {
     let sig_data = SignatureData {
         signers,
         signatures,
-        reference_block: 0,
+        reference_block: TEST_REF_BLOCK,
     };
 
-    // ensure it fails the signature checks
     let result = client.try_verify_eth(&Bytes::from_array(&env, &ENVELOPE), &sig_data);
     assert_eq!(result, Err(Ok(HandlerError::InvalidSignature)));
 }

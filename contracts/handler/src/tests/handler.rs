@@ -7,12 +7,17 @@ use crate::{Handler, HandlerClient, HandlerError, SignatureData};
 use alloy_primitives::FixedBytes;
 use alloy_sol_types::SolValue;
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _};
+use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_security::{Security, SecurityClient};
 use warpdrive_shared::testutils::{
     PubKey, SigningKey, compressed_pubkey, make_signing_key, sign_envelope,
 };
 use warpdrive_verification::Verification;
+
+/// Reference block used by default in tests — signers are registered at this ledger.
+const TEST_REF_BLOCK: u32 = 10;
+/// Current ledger sequence in tests — must be > TEST_REF_BLOCK.
+const TEST_CURRENT_LEDGER: u32 = 100;
 
 fn make_envelope_bytes_eth(env: &Env, event_id_seed: u8) -> Bytes {
     let mut event_id = [0u8; 20];
@@ -54,6 +59,7 @@ fn expected_payload(env: &Env, seed: u8) -> Bytes {
 /// Returns (handler_client, key1, pubkey1, key2, pubkey2) with key1 and key2
 /// registered as signers (weight 100 and 200, threshold 55%).
 /// Required weight = (100+200)*55/100 = 165.
+/// Signers are registered at ledger TEST_REF_BLOCK, current ledger is TEST_CURRENT_LEDGER.
 fn setup_handler_with_signers(
     env: &Env,
 ) -> (HandlerClient<'_>, SigningKey, PubKey, SigningKey, PubKey) {
@@ -64,6 +70,9 @@ fn setup_handler_with_signers(
     let pk1 = compressed_pubkey(env, &key1);
     let pk2 = compressed_pubkey(env, &key2);
 
+    // Register signers at TEST_REF_BLOCK so checkpoints are recorded there
+    env.ledger().set_sequence_number(TEST_REF_BLOCK);
+
     let security_id = env.register(Security, (&admin, 55u64, 100u64));
     let security = SecurityClient::new(env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &100);
@@ -72,6 +81,9 @@ fn setup_handler_with_signers(
     let verification_id = env.register(Verification, (&admin, &security_id));
     let handler_id = env.register(Handler, (&admin, &verification_id));
     let client = HandlerClient::new(env, &handler_id);
+
+    // Advance ledger so reference_block is in the past
+    env.ledger().set_sequence_number(TEST_CURRENT_LEDGER);
 
     (client, key1, pk1, key2, pk2)
 }
@@ -97,7 +109,7 @@ fn make_sig_data(
     SignatureData {
         signers,
         signatures,
-        reference_block: 0,
+        reference_block: TEST_REF_BLOCK,
     }
 }
 
@@ -111,7 +123,6 @@ fn test_verify_success() {
     let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
 
     let envelope = make_envelope_bytes_eth(&env, 1);
-    // key2 has weight 200 >= required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
     let result = client.try_verify_eth(&envelope, &sig_data);
@@ -153,13 +164,11 @@ fn test_verify_duplicate_event_fails() {
     let result = client.try_verify_eth(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
 
-    // Payload was saved on first call
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
         Some(expected_payload(&env, 1))
     );
 
-    // Same event_id again
     let result = client.try_verify_eth(&envelope, &sig_data);
     assert_eq!(result, Err(Ok(HandlerError::EventAlreadySeen)));
 }
@@ -208,7 +217,7 @@ fn test_verify_invalid_signature_fails() {
     let sig_data = SignatureData {
         signers,
         signatures,
-        reference_block: 0,
+        reference_block: TEST_REF_BLOCK,
     };
 
     assert_eq!(
@@ -216,7 +225,6 @@ fn test_verify_invalid_signature_fails() {
         Err(Ok(HandlerError::InvalidSignature)),
     );
 
-    // Payload should not be saved on failure
     assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
@@ -226,7 +234,6 @@ fn test_verify_insufficient_weight_fails() {
     let (client, key1, pk1, _key2, _pk2) = setup_handler_with_signers(&env);
 
     let envelope = make_envelope_bytes_eth(&env, 1);
-    // key1 has weight 100 < required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1)]);
 
     assert_eq!(
@@ -234,13 +241,10 @@ fn test_verify_insufficient_weight_fails() {
         Err(Ok(HandlerError::InsufficientWeight)),
     );
 
-    // Payload should not be saved on failure
     assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
 /********************** XLM VARIANT *******************/
-
-// ── Happy path ──────────────────────────────────────────────────────
 
 #[test]
 fn test_verify_success_xlm() {
@@ -248,7 +252,6 @@ fn test_verify_success_xlm() {
     let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
 
     let envelope = make_envelope_bytes_xlm(&env, 1);
-    // key2 has weight 200 >= required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
     let result = client.try_verify_xlm(&envelope, &sig_data);
@@ -277,8 +280,6 @@ fn test_verify_success_combined_weight_xlm() {
     );
 }
 
-// ── Duplicate event ─────────────────────────────────────────────────
-
 #[test]
 fn test_verify_duplicate_event_fails_xlm() {
     let env = Env::default();
@@ -290,13 +291,11 @@ fn test_verify_duplicate_event_fails_xlm() {
     let result = client.try_verify_xlm(&envelope, &sig_data);
     assert_eq!(result, Ok(Ok(())));
 
-    // Payload was saved on first call
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
         Some(expected_payload(&env, 1))
     );
 
-    // Same event_id again
     let result = client.try_verify_xlm(&envelope, &sig_data);
     assert_eq!(result, Err(Ok(HandlerError::EventAlreadySeen)));
 }
@@ -328,8 +327,6 @@ fn test_verify_different_events_succeed_xlm() {
     );
 }
 
-// ── Verification errors propagate from verification contract ────────
-
 #[test]
 fn test_verify_invalid_signature_fails_xlm() {
     let env = Env::default();
@@ -345,7 +342,7 @@ fn test_verify_invalid_signature_fails_xlm() {
     let sig_data = SignatureData {
         signers,
         signatures,
-        reference_block: 0,
+        reference_block: TEST_REF_BLOCK,
     };
 
     assert_eq!(
@@ -353,7 +350,6 @@ fn test_verify_invalid_signature_fails_xlm() {
         Err(Ok(HandlerError::InvalidSignature)),
     );
 
-    // Payload should not be saved on failure
     assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
@@ -363,7 +359,6 @@ fn test_verify_insufficient_weight_fails_xlm() {
     let (client, key1, pk1, _key2, _pk2) = setup_handler_with_signers(&env);
 
     let envelope = make_envelope_bytes_xlm(&env, 1);
-    // key1 has weight 100 < required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1)]);
 
     assert_eq!(
@@ -371,7 +366,6 @@ fn test_verify_insufficient_weight_fails_xlm() {
         Err(Ok(HandlerError::InsufficientWeight)),
     );
 
-    // Payload should not be saved on failure
     assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
@@ -383,7 +377,6 @@ fn test_eth_refuses_xlm_packets() {
     let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
 
     let envelope = make_envelope_bytes_xlm(&env, 1);
-    // key2 has weight 200 >= required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
     // Must fail
@@ -408,7 +401,6 @@ fn test_xlm_refuses_eth_packets() {
     let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
 
     let envelope = make_envelope_bytes_eth(&env, 1);
-    // key2 has weight 200 >= required 165
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
     // Must fail
@@ -425,4 +417,192 @@ fn test_xlm_refuses_eth_packets() {
         client.payload(&expected_event_id(&env, 1)),
         Some(expected_payload(&env, 1))
     );
+}
+
+/********************* REFERENCE BLOCK VALIDATION **************************/
+
+#[test]
+fn test_verify_reference_block_in_future_fails() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    let raw = envelope.to_alloc_vec();
+    let sig_bytes = sign_envelope(&key2, &raw);
+
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(pk2);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &sig_bytes));
+
+    // reference_block == current ledger (not strictly in the past)
+    let sig_data = SignatureData {
+        signers,
+        signatures,
+        reference_block: TEST_CURRENT_LEDGER,
+    };
+
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::InvalidReferenceBlock)),
+    );
+}
+
+#[test]
+fn test_verify_reference_block_too_old_fails() {
+    let env = Env::default();
+
+    // Set up at ledger 10, advance to 300 (more than 200 blocks past reference)
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+    env.ledger().set_sequence_number(300);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    let raw = envelope.to_alloc_vec();
+    let sig_bytes = sign_envelope(&key2, &raw);
+
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(pk2);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &sig_bytes));
+
+    // reference_block = 10, current = 300, age = 290 > 200
+    let sig_data = SignatureData {
+        signers,
+        signatures,
+        reference_block: TEST_REF_BLOCK,
+    };
+
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::InvalidReferenceBlock)),
+    );
+}
+
+/********************* HISTORICAL CHECKPOINT TESTS **************************/
+
+#[test]
+fn test_verify_historical_passes_current_fails() {
+    let env = Env::default();
+    let admin = soroban_sdk::Address::generate(&env);
+
+    let key2 = make_signing_key(2);
+    let pk2 = compressed_pubkey(&env, &key2);
+    let key1 = make_signing_key(1);
+    let pk1 = compressed_pubkey(&env, &key1);
+
+    // Ledger 10: key1=100, key2=200, total=300, required=165
+    env.ledger().set_sequence_number(10);
+    let security_id = env.register(Security, (&admin, 55u64, 100u64));
+    let security = SecurityClient::new(&env, &security_id);
+    security.mock_all_auths().add_signer(&pk1, &100);
+    security.mock_all_auths().add_signer(&pk2, &200);
+
+    let verification_id = env.register(Verification, (&admin, &security_id));
+    let handler_id = env.register(Handler, (&admin, &verification_id));
+    let client = HandlerClient::new(&env, &handler_id);
+
+    // Ledger 50: reduce key2 to 50 → total=150, required=82, key2 alone=50 < 82
+    env.ledger().set_sequence_number(50);
+    security.mock_all_auths().add_signer(&pk2, &50);
+
+    // Advance to 100 for handler calls
+    env.ledger().set_sequence_number(100);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    let raw = envelope.to_alloc_vec();
+    let sig_bytes = sign_envelope(&key2, &raw);
+
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(pk2);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &sig_bytes));
+
+    // reference_block=10: key2 had 200, total 300, required 165 → passes
+    let sig_data = SignatureData {
+        signers: signers.clone(),
+        signatures: signatures.clone(),
+        reference_block: 10,
+    };
+    assert_eq!(client.try_verify_eth(&envelope, &sig_data), Ok(Ok(())));
+
+    // reference_block=50: key2 has 50, total 150, required 82 → fails
+    let envelope2 = make_envelope_bytes_eth(&env, 2);
+    let raw2 = envelope2.to_alloc_vec();
+    let sig_bytes2 = sign_envelope(&key2, &raw2);
+    let mut signatures2: Vec<BytesN<65>> = Vec::new(&env);
+    signatures2.push_back(BytesN::from_array(&env, &sig_bytes2));
+
+    let sig_data2 = SignatureData {
+        signers,
+        signatures: signatures2,
+        reference_block: 50,
+    };
+    assert_eq!(
+        client.try_verify_eth(&envelope2, &sig_data2),
+        Err(Ok(HandlerError::InsufficientWeight)),
+    );
+}
+
+#[test]
+fn test_verify_historical_fails_current_passes() {
+    let env = Env::default();
+    let admin = soroban_sdk::Address::generate(&env);
+
+    let key1 = make_signing_key(1);
+    let pk1 = compressed_pubkey(&env, &key1);
+    let key2 = make_signing_key(2);
+    let pk2 = compressed_pubkey(&env, &key2);
+
+    // Ledger 10: key1=50, key2=200, total=250, required=137, key1 alone=50 < 137
+    env.ledger().set_sequence_number(10);
+    let security_id = env.register(Security, (&admin, 55u64, 100u64));
+    let security = SecurityClient::new(&env, &security_id);
+    security.mock_all_auths().add_signer(&pk1, &50);
+    security.mock_all_auths().add_signer(&pk2, &200);
+
+    let verification_id = env.register(Verification, (&admin, &security_id));
+    let handler_id = env.register(Handler, (&admin, &verification_id));
+    let client = HandlerClient::new(&env, &handler_id);
+
+    // Ledger 50: key1=200, remove key2 → total=200, required=110, key1 alone=200 >= 110
+    env.ledger().set_sequence_number(50);
+    security.mock_all_auths().add_signer(&pk1, &200);
+    security.mock_all_auths().remove_signer(&pk2);
+
+    // Advance to 100
+    env.ledger().set_sequence_number(100);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    let raw = envelope.to_alloc_vec();
+    let sig_bytes = sign_envelope(&key1, &raw);
+
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(pk1);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &sig_bytes));
+
+    // reference_block=10: key1 had 50, total 250, required 137 → fails
+    let sig_data = SignatureData {
+        signers: signers.clone(),
+        signatures: signatures.clone(),
+        reference_block: 10,
+    };
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::InsufficientWeight)),
+    );
+
+    // reference_block=50: key1 has 200, total 200, required 110 → passes
+    let envelope2 = make_envelope_bytes_eth(&env, 2);
+    let raw2 = envelope2.to_alloc_vec();
+    let sig_bytes2 = sign_envelope(&key1, &raw2);
+    let mut signatures2: Vec<BytesN<65>> = Vec::new(&env);
+    signatures2.push_back(BytesN::from_array(&env, &sig_bytes2));
+
+    let sig_data2 = SignatureData {
+        signers,
+        signatures: signatures2,
+        reference_block: 50,
+    };
+    assert_eq!(client.try_verify_eth(&envelope2, &sig_data2), Ok(Ok(())));
 }

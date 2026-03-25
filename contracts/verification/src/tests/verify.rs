@@ -1,7 +1,7 @@
 extern crate std;
 
 use crate::{Verification, VerificationClient, VerifyError};
-use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _};
+use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_security::{Security, SecurityClient};
 use warpdrive_shared::testutils::{
     PubKey, SigningKey, compressed_pubkey, make_signing_key, sign_envelope,
@@ -12,6 +12,9 @@ fn setup_contracts(env: &Env) -> (VerificationClient<'_>, SecurityClient<'_>) {
 
     let key1 = make_signing_key(1);
     let key2 = make_signing_key(2);
+
+    // Set ledger to 100 so checkpoints are recorded at this sequence
+    env.ledger().with_mut(|li| li.sequence_number = 100);
 
     // Deploy security contract with threshold 55/100
     let security_id = env.register(Security, (&admin, 55u64, 100u64));
@@ -28,6 +31,9 @@ fn setup_contracts(env: &Env) -> (VerificationClient<'_>, SecurityClient<'_>) {
     // Deploy verification contract referencing the security contract
     let verification_id = env.register(Verification, (&admin, &security_id));
     let verification = VerificationClient::new(env, &verification_id);
+
+    // Advance ledger past the checkpoint
+    env.ledger().with_mut(|li| li.sequence_number = 200);
 
     (verification, security)
 }
@@ -170,7 +176,7 @@ fn test_verify_multi_empty_signatures() {
     let sigs: Vec<BytesN<65>> = Vec::new(&env);
     let pubs: Vec<PubKey> = Vec::new(&env);
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
     assert_eq!(result, Err(Ok(VerifyError::EmptySignatures)));
 }
 
@@ -192,7 +198,7 @@ fn test_verify_multi_length_mismatch() {
     pubs.push_back(lo_pub.clone());
     pubs.push_back(lo_pub);
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
     assert_eq!(result, Err(Ok(VerifyError::LengthMismatch)));
 }
 
@@ -217,7 +223,7 @@ fn test_verify_multi_signers_not_ordered() {
     pubs.push_back(hi_pub);
     pubs.push_back(lo_pub);
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
     assert_eq!(result, Err(Ok(VerifyError::SignersNotOrdered)));
 }
 
@@ -241,7 +247,7 @@ fn test_verify_multi_duplicate_signer() {
     pubs.push_back(lo_pub.clone());
     pubs.push_back(lo_pub);
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
     assert_eq!(result, Err(Ok(VerifyError::SignersNotOrdered)));
 }
 
@@ -266,7 +272,7 @@ fn test_verify_multi_one_invalid_signature() {
     pubs.push_back(lo_pub);
     pubs.push_back(hi_pub);
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
     assert_eq!(result, Err(Ok(VerifyError::InvalidSignature)));
 }
 
@@ -300,7 +306,7 @@ fn test_verify_multi_signer_not_registered() {
         pubs.push_back(lo_pub);
     }
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
     // key3 is not registered — should fail (may hit on first or second position)
     assert_eq!(result, Err(Ok(VerifyError::SignerNotRegistered)));
 }
@@ -315,13 +321,11 @@ fn test_verify_multi_insufficient_total_weight() {
     let pk1 = compressed_pubkey(&env, &key1);
     let pk2 = compressed_pubkey(&env, &key2);
 
-    // key1 weight 10, key2 weight 10 — total 20, required = 20 * 90 / 100 = 18
-    // Actually that passes. Use weight 5 each: total 10, required = 10 * 90 / 100 = 9 — passes too.
-    // Let's use: key1 weight 1, key2 not added. Single signer, weight 1, threshold 90%.
-    // required = 1 * 90 / 100 = 0 — hmm, integer math.
-    // Better: use the default setup (key1=100, key2=200, threshold 55%).
-    // required = 300 * 55 / 100 = 165. key1 alone = 100 < 165.
-    // So just use key1 alone in multi-verify.
+    // Set ledger to 100 so checkpoints are recorded at this sequence
+    env.ledger().with_mut(|li| li.sequence_number = 100);
+
+    // key1 weight 100, key2 weight 200 — total 300, required = 300 * 55 / 100 = 165
+    // key1 alone = 100 < 165
     let security_id = env.register(Security, (&admin, 55u64, 100u64));
     let security = SecurityClient::new(&env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &100);
@@ -329,6 +333,9 @@ fn test_verify_multi_insufficient_total_weight() {
 
     let verification_id = env.register(Verification, (&admin, &security_id));
     let verification = VerificationClient::new(&env, &verification_id);
+
+    // Advance ledger past the checkpoint
+    env.ledger().with_mut(|li| li.sequence_number = 200);
 
     let message = b"hello world";
     let envelope = Bytes::from_slice(&env, message);
@@ -341,7 +348,7 @@ fn test_verify_multi_insufficient_total_weight() {
     let mut pubs: Vec<PubKey> = Vec::new(&env);
     pubs.push_back(pk1);
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
     assert_eq!(result, Err(Ok(VerifyError::InsufficientWeight)));
 }
 
@@ -366,6 +373,103 @@ fn test_verify_multi_success_combined_weight() {
     pubs.push_back(lo_pub);
     pubs.push_back(hi_pub);
 
-    let result = verification.try_verify(&envelope, &sigs, &pubs);
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
+    assert_eq!(result, Ok(Ok(())));
+}
+
+#[test]
+fn test_verify_historical_passes_current_fails() {
+    let env = Env::default();
+    let admin = soroban_sdk::Address::generate(&env);
+
+    let key1 = make_signing_key(1);
+    let key2 = make_signing_key(2);
+    let pk1 = compressed_pubkey(&env, &key1);
+    let pk2 = compressed_pubkey(&env, &key2);
+
+    // Ledger 100: key1=100, key2=200
+    // total=300, required=300*55/100=165, key2 alone=200 >= 165 passes
+    env.ledger().with_mut(|li| li.sequence_number = 100);
+
+    let security_id = env.register(Security, (&admin, 55u64, 100u64));
+    let security = SecurityClient::new(&env, &security_id);
+    security.mock_all_auths().add_signer(&pk1, &100);
+    security.mock_all_auths().add_signer(&pk2, &200);
+
+    let verification_id = env.register(Verification, (&admin, &security_id));
+    let verification = VerificationClient::new(&env, &verification_id);
+
+    // Ledger 150: update key2 weight to 50
+    // total=150, required=150*55/100=82, key2 alone=50 < 82 fails
+    env.ledger().with_mut(|li| li.sequence_number = 150);
+    security.mock_all_auths().add_signer(&pk2, &50);
+
+    // Advance to ledger 200 for verification calls
+    env.ledger().with_mut(|li| li.sequence_number = 200);
+
+    let message = b"hello world";
+    let envelope = Bytes::from_slice(&env, message);
+    let sig2 = sign_envelope(&key2, message);
+
+    let mut sigs: Vec<BytesN<65>> = Vec::new(&env);
+    sigs.push_back(BytesN::from_array(&env, &sig2));
+    let mut pubs: Vec<PubKey> = Vec::new(&env);
+    pubs.push_back(pk2.clone());
+
+    // reference_block=100: key2 had weight 200, total 300, required 165 -> 200 >= 165
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
+    assert_eq!(result, Ok(Ok(())));
+
+    // reference_block=150: key2 has weight 50, total 150, required 82 -> 50 < 82
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &150u32);
+    assert_eq!(result, Err(Ok(VerifyError::InsufficientWeight)));
+}
+
+#[test]
+fn test_verify_historical_fails_current_passes() {
+    let env = Env::default();
+    let admin = soroban_sdk::Address::generate(&env);
+
+    let key1 = make_signing_key(1);
+    let key2 = make_signing_key(2);
+    let pk1 = compressed_pubkey(&env, &key1);
+    let pk2 = compressed_pubkey(&env, &key2);
+
+    // Ledger 100: key1=50, key2=200
+    // total=250, required=250*55/100=137, key1 alone=50 < 137 fails
+    env.ledger().with_mut(|li| li.sequence_number = 100);
+
+    let security_id = env.register(Security, (&admin, 55u64, 100u64));
+    let security = SecurityClient::new(&env, &security_id);
+    security.mock_all_auths().add_signer(&pk1, &50);
+    security.mock_all_auths().add_signer(&pk2, &200);
+
+    let verification_id = env.register(Verification, (&admin, &security_id));
+    let verification = VerificationClient::new(&env, &verification_id);
+
+    // Ledger 150: update key1 to 200 and remove key2
+    // total=200, required=200*55/100=110, key1 alone=200 >= 110 passes
+    env.ledger().with_mut(|li| li.sequence_number = 150);
+    security.mock_all_auths().add_signer(&pk1, &200);
+    security.mock_all_auths().remove_signer(&pk2);
+
+    // Advance to ledger 200 for verification calls
+    env.ledger().with_mut(|li| li.sequence_number = 200);
+
+    let message = b"hello world";
+    let envelope = Bytes::from_slice(&env, message);
+    let sig1 = sign_envelope(&key1, message);
+
+    let mut sigs: Vec<BytesN<65>> = Vec::new(&env);
+    sigs.push_back(BytesN::from_array(&env, &sig1));
+    let mut pubs: Vec<PubKey> = Vec::new(&env);
+    pubs.push_back(pk1.clone());
+
+    // reference_block=100: key1 had weight 50, total 250, required 137 -> 50 < 137
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &100u32);
+    assert_eq!(result, Err(Ok(VerifyError::InsufficientWeight)));
+
+    // reference_block=150: key1 has weight 200, total 200, required 110 -> 200 >= 110
+    let result = verification.try_verify(&envelope, &sigs, &pubs, &150u32);
     assert_eq!(result, Ok(Ok(())));
 }
