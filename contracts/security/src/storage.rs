@@ -130,6 +130,24 @@ pub fn get_signer_weight_at(env: &Env, key: PubKey, reference_block: u32) -> u64
     checkpoint::lookup_at(&SignerWeightHistory::new(env, key), reference_block)
 }
 
+pub fn get_signer_weights(env: &Env, keys: &Vec<PubKey>) -> Vec<u64> {
+    let mut result = Vec::new(env);
+    for i in 0..keys.len() {
+        let key = keys.get(i).unwrap();
+        result.push_back(get_signer_weight(env, key).unwrap_or(0));
+    }
+    result
+}
+
+pub fn get_signer_weights_at(env: &Env, keys: &Vec<PubKey>, reference_block: u32) -> Vec<u64> {
+    let mut result = Vec::new(env);
+    for i in 0..keys.len() {
+        let key = keys.get(i).unwrap();
+        result.push_back(get_signer_weight_at(env, key, reference_block));
+    }
+    result
+}
+
 pub fn get_total_weight_at(env: &Env, reference_block: u32) -> u64 {
     checkpoint::lookup_at(&TotalWeightHistory::new(env), reference_block)
 }

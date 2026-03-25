@@ -219,7 +219,7 @@ mod tests {
         store.set_ledger(20);
         push(&store, 200);
 
-        assert_eq!(lookup_at(&store, 9), 0);   // before first
+        assert_eq!(lookup_at(&store, 9), 0); // before first
         assert_eq!(lookup_at(&store, 10), 100); // exact first
         assert_eq!(lookup_at(&store, 15), 100); // between
         assert_eq!(lookup_at(&store, 19), 100); // just before second

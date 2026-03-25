@@ -67,6 +67,14 @@ impl Security {
         storage::get_signer_weight_at(&env, key, reference_block)
     }
 
+    pub fn get_signer_weights(env: Env, keys: Vec<PubKey>) -> Vec<u64> {
+        storage::get_signer_weights(&env, &keys)
+    }
+
+    pub fn get_signer_weights_at(env: Env, keys: Vec<PubKey>, reference_block: u32) -> Vec<u64> {
+        storage::get_signer_weights_at(&env, &keys, reference_block)
+    }
+
     pub fn get_total_weight_at(env: Env, reference_block: u32) -> u64 {
         storage::get_total_weight_at(&env, reference_block)
     }

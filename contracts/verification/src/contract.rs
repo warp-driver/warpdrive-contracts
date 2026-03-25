@@ -85,8 +85,12 @@ impl Verification {
             return Err(VerifyError::LengthMismatch);
         }
 
+        // Batch-fetch all signer weights and required weight in two cross-contract calls
+        // instead of one per signer.
         let security_addr = storage::get_security_contract(&env);
         let security = SecurityClient::new(&env, &security_addr);
+        let weights = security.get_signer_weights_at(&signer_pubkeys, &reference_block);
+        let required = security.required_weight_at(&reference_block);
 
         let mut total_weight: u64 = 0;
         let mut prev_pubkey: Option<PubKey> = None;
@@ -107,7 +111,7 @@ impl Verification {
                 return Err(VerifyError::InvalidSignature);
             }
 
-            let weight = security.get_signer_weight_at(&pubkey, &reference_block);
+            let weight = weights.get(i).unwrap();
             if weight == 0 {
                 return Err(VerifyError::SignerNotRegistered);
             }
@@ -115,7 +119,6 @@ impl Verification {
             total_weight = total_weight.checked_add(weight).expect("weight overflow");
         }
 
-        let required = security.required_weight_at(&reference_block);
         if total_weight < required {
             return Err(VerifyError::InsufficientWeight);
         }
