@@ -34,6 +34,7 @@ impl VerificationUpgraded {
 
 // ── Interface trait (compile-time contract conformance) ──────────────
 
+#[contractclient(name = "VerificationClient")]
 pub trait VerificationInterface {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String);
     fn admin(env: Env) -> Address;
@@ -58,18 +59,4 @@ pub trait VerificationInterface {
         signer_pubkeys: Vec<PubKey>,
         reference_block: u32,
     ) -> Result<(), VerifyError>;
-}
-
-// ── Client trait (cross-contract calls) ──────────────────────────────
-
-#[contractclient(name = "VerificationClient")]
-#[allow(dead_code)]
-pub trait VerificationClientInterface {
-    fn verify(
-        env: Env,
-        envelope: Bytes,
-        signatures: Vec<BytesN<65>>,
-        signer_pubkeys: Vec<PubKey>,
-        reference_block: u32,
-    );
 }

@@ -1,6 +1,7 @@
 use enum_repr::EnumRepr;
 use soroban_sdk::{
-    Address, Bytes, BytesN, Env, String, Vec, contracterror, contractevent, contracttype,
+    Address, Bytes, BytesN, Env, String, Vec, contractclient, contracterror, contractevent,
+    contracttype,
 };
 
 use crate::interfaces::PubKey;
@@ -85,6 +86,7 @@ impl HandlerUpgraded {
 
 // ── Interface trait (compile-time contract conformance) ──────────────
 
+#[contractclient(name = "HandlerClient")]
 pub trait HandlerInterface {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String);
     fn admin(env: Env) -> Address;

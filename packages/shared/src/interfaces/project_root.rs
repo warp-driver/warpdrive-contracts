@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, BytesN, Env, String, contractevent};
+use soroban_sdk::{Address, BytesN, Env, String, contractclient, contractevent};
 
 // ── Events ───────────────────────────────────────────────────────────
 
@@ -15,6 +15,7 @@ impl ProjectRootUpgraded {
 
 // ── Interface trait (compile-time contract conformance) ──────────────
 
+#[contractclient(name = "ProjectRootClient")]
 pub trait ProjectRootInterface {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String);
     fn admin(env: Env) -> Address;

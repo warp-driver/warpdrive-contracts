@@ -29,23 +29,13 @@ fn validate_reference_block(env: &Env, reference_block: u32) -> Result<(), Handl
 fn map_verify_result(
     res: Result<
         Result<(), soroban_sdk::ConversionError>,
-        Result<soroban_sdk::Error, soroban_sdk::InvokeError>,
+        Result<VerifyError, soroban_sdk::InvokeError>,
     >,
 ) -> Result<(), HandlerError> {
     match res {
         Ok(Ok(())) => Ok(()),
         Ok(Err(_conversion)) => Err(HandlerError::UnknownVerificationError),
-        Err(Ok(e)) => {
-            if let Ok(soroban_sdk::xdr::ScError::Contract(code)) =
-                soroban_sdk::xdr::ScError::try_from(e)
-            {
-                let err =
-                    VerifyError::from_repr(code).ok_or(HandlerError::UnknownVerificationError)?;
-                Err(HandlerError::from(err))
-            } else {
-                Err(HandlerError::UnknownVerificationError)
-            }
-        }
+        Err(Ok(e)) => Err(HandlerError::from(e)),
         Err(Err(_invoke_err)) => Err(HandlerError::UnknownVerificationError),
     }
 }
