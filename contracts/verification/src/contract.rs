@@ -1,23 +1,13 @@
-use soroban_sdk::{
-    Address, Bytes, BytesN, Env, String, Vec, contract, contractevent, contractimpl,
-};
-pub use warpdrive_shared::VerifyError;
+use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contractimpl};
 
-use crate::security_client::SecurityClient;
+use warpdrive_shared::interfaces::{
+    PubKey,
+    security::SecurityClient,
+    verification::{VerificationInterface, VerificationUpgraded, VerifyError},
+};
 
 use crate::storage;
-use crate::utils::{self, PubKey};
-
-#[contractevent]
-pub struct VerificationUpgraded {
-    pub version: String,
-}
-
-impl VerificationUpgraded {
-    pub fn new(version: String) -> Self {
-        Self { version }
-    }
-}
+use crate::utils;
 
 #[contract]
 pub struct Verification;
@@ -29,8 +19,11 @@ impl Verification {
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_security_contract(&env, &security_contract);
     }
+}
 
-    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
+#[contractimpl]
+impl VerificationInterface for Verification {
+    fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
@@ -39,37 +32,37 @@ impl Verification {
         VerificationUpgraded::new(new_version).publish(&env);
     }
 
-    pub fn admin(env: Env) -> Address {
+    fn admin(env: Env) -> Address {
         storage::get_admin(&env)
     }
 
-    pub fn pending_admin(env: Env) -> Option<Address> {
+    fn pending_admin(env: Env) -> Option<Address> {
         warpdrive_shared::admin::pending(&env)
     }
 
-    pub fn propose_admin(env: Env, new_admin: Address) {
+    fn propose_admin(env: Env, new_admin: Address) {
         warpdrive_shared::admin::propose(&env, &storage::get_admin(&env), new_admin);
     }
 
-    pub fn accept_admin(env: Env) {
+    fn accept_admin(env: Env) {
         let new_admin = warpdrive_shared::admin::accept(&env);
         storage::set_admin(&env, &new_admin);
     }
 
-    pub fn version(env: Env) -> String {
+    fn version(env: Env) -> String {
         storage::get_version(&env)
     }
 
-    pub fn security_contract(env: Env) -> Address {
+    fn security_contract(env: Env) -> Address {
         storage::get_security_contract(&env)
     }
 
-    pub fn required_weight(env: Env) -> u64 {
+    fn required_weight(env: Env) -> u64 {
         let security_addr = storage::get_security_contract(&env);
         SecurityClient::new(&env, &security_addr).required_weight()
     }
 
-    pub fn signer_weight(env: Env, signer_pubkey: PubKey) -> u64 {
+    fn signer_weight(env: Env, signer_pubkey: PubKey) -> u64 {
         let security_addr = storage::get_security_contract(&env);
         SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
     }
@@ -79,7 +72,7 @@ impl Verification {
     ///
     /// When `reference_block` is `None`, uses the current signer weight.
     /// When `Some(block)`, uses the historical weight at that ledger.
-    pub fn check_one(
+    fn check_one(
         env: Env,
         envelope: Bytes,
         signature: BytesN<65>,
@@ -104,7 +97,7 @@ impl Verification {
         Ok(weight)
     }
 
-    pub fn verify(
+    fn verify(
         env: Env,
         envelope: Bytes,
         signatures: Vec<BytesN<65>>,

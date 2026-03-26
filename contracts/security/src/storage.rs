@@ -1,14 +1,8 @@
-use soroban_sdk::{Address, BytesN, Env, String, Vec, contracttype};
+use soroban_sdk::{Address, Env, String, Vec, contracttype};
 use warpdrive_shared::checkpoint::{self, Checkpoint, CheckpointStore};
 
-// Compressed Ethereum PubKey
-pub type PubKey = BytesN<33>;
-
-#[contracttype]
-pub struct SignerInfo {
-    pub key: PubKey,
-    pub weight: u64,
-}
+pub use warpdrive_shared::interfaces::PubKey;
+pub use warpdrive_shared::interfaces::security::SignerInfo;
 
 #[contracttype]
 #[derive(Clone)]

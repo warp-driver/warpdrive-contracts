@@ -4,6 +4,8 @@ use warpdrive_security::Security;
 use warpdrive_verification::Verification;
 
 mod contract_wasm {
+    use warpdrive_shared::interfaces::PubKey;
+
     soroban_sdk::contractimport!(
         file = "../../target/wasm32v1-none/release/warpdrive_handler.wasm"
     );

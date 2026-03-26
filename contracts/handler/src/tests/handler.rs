@@ -1,7 +1,6 @@
 extern crate alloc;
 extern crate std;
 
-use crate::contract::XlmEnvelope;
 use crate::envelope::Envelope;
 use crate::{Handler, HandlerClient, HandlerError, SignatureData};
 use alloy_primitives::FixedBytes;
@@ -9,6 +8,7 @@ use alloy_sol_types::SolValue;
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_security::{Security, SecurityClient};
+use warpdrive_shared::interfaces::handler::XlmEnvelope;
 use warpdrive_shared::testutils::{
     PubKey, SigningKey, compressed_pubkey, make_signing_key, sign_envelope,
 };

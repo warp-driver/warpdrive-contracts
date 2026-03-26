@@ -1,85 +1,17 @@
-use enum_repr::EnumRepr;
-use soroban_sdk::{
-    Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractevent, contractimpl,
-    contracttype, xdr::FromXdr,
+use soroban_sdk::{Address, Bytes, BytesN, Env, String, contract, contractimpl, xdr::FromXdr};
+
+use warpdrive_shared::interfaces::{
+    handler::{
+        HandlerError, HandlerInterface, HandlerUpgraded, SignatureData, Verified, XlmEnvelope,
+    },
+    verification::{VerificationClient, VerifyError},
 };
 
 use crate::envelope::Envelope as EthEnvelope;
 use crate::storage;
-use crate::verification_client::{VerificationClient, VerifyError};
 
 /// Maximum age (in ledgers) allowed for a reference block.
 const MAX_REFERENCE_BLOCK_AGE: u32 = 200;
-
-#[contracttype]
-pub struct SignatureData {
-    pub signers: Vec<BytesN<33>>,
-    pub signatures: Vec<BytesN<65>>,
-    pub reference_block: u32,
-}
-
-#[contracttype]
-pub struct XlmEnvelope {
-    pub event_id: BytesN<20>,
-    pub ordering: BytesN<12>,
-    pub payload: Bytes,
-}
-
-#[contracterror]
-#[EnumRepr(type = "u32")]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-pub enum HandlerError {
-    // Errors from the handler itself
-    EventAlreadySeen = 1,
-    InvalidReferenceBlock = 2,
-    InvalidEnvelope = 3,
-
-    // Some numbers intentionally skipped...
-    UnknownVerificationError = 20,
-    // Mapped from VerifyError
-    InvalidSignature = 21,
-    SignerNotRegistered = 22,
-    InsufficientWeight = 23,
-    EmptySignatures = 24,
-    LengthMismatch = 25,
-    SignersNotOrdered = 26,
-}
-
-#[contractevent]
-pub struct Verified {
-    #[topic]
-    pub event_id: BytesN<20>,
-}
-
-impl Verified {
-    pub fn new(event_id: BytesN<20>) -> Self {
-        Self { event_id }
-    }
-}
-
-#[contractevent]
-pub struct HandlerUpgraded {
-    pub version: String,
-}
-
-impl HandlerUpgraded {
-    pub fn new(version: String) -> Self {
-        Self { version }
-    }
-}
-
-impl From<VerifyError> for HandlerError {
-    fn from(value: VerifyError) -> Self {
-        match value {
-            VerifyError::InvalidSignature => HandlerError::InvalidSignature,
-            VerifyError::SignerNotRegistered => HandlerError::SignerNotRegistered,
-            VerifyError::InsufficientWeight => HandlerError::InsufficientWeight,
-            VerifyError::EmptySignatures => HandlerError::EmptySignatures,
-            VerifyError::LengthMismatch => HandlerError::LengthMismatch,
-            VerifyError::SignersNotOrdered => HandlerError::SignersNotOrdered,
-        }
-    }
-}
 
 /// Validates that `reference_block` is strictly in the past and within the allowed age window.
 fn validate_reference_block(env: &Env, reference_block: u32) -> Result<(), HandlerError> {
@@ -128,8 +60,11 @@ impl Handler {
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_verification_contract(&env, &verification_contract);
     }
+}
 
-    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
+#[contractimpl]
+impl HandlerInterface for Handler {
+    fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
@@ -138,32 +73,32 @@ impl Handler {
         HandlerUpgraded::new(new_version).publish(&env);
     }
 
-    pub fn admin(env: Env) -> Address {
+    fn admin(env: Env) -> Address {
         storage::get_admin(&env)
     }
 
-    pub fn pending_admin(env: Env) -> Option<Address> {
+    fn pending_admin(env: Env) -> Option<Address> {
         warpdrive_shared::admin::pending(&env)
     }
 
-    pub fn propose_admin(env: Env, new_admin: Address) {
+    fn propose_admin(env: Env, new_admin: Address) {
         warpdrive_shared::admin::propose(&env, &storage::get_admin(&env), new_admin);
     }
 
-    pub fn accept_admin(env: Env) {
+    fn accept_admin(env: Env) {
         let new_admin = warpdrive_shared::admin::accept(&env);
         storage::set_admin(&env, &new_admin);
     }
 
-    pub fn version(env: Env) -> String {
+    fn version(env: Env) -> String {
         storage::get_version(&env)
     }
 
-    pub fn verification_contract(env: Env) -> Address {
+    fn verification_contract(env: Env) -> Address {
         storage::get_verification_contract(&env)
     }
 
-    pub fn payload(env: Env, event_id: BytesN<20>) -> Option<Bytes> {
+    fn payload(env: Env, event_id: BytesN<20>) -> Option<Bytes> {
         storage::get_payload(&env, event_id)
     }
 
@@ -171,7 +106,7 @@ impl Handler {
     ///
     /// No caller authorization is required — this is intentional. Security is enforced entirely
     /// through cryptographic signature verification of the envelope contents.
-    pub fn verify_eth(
+    fn verify_eth(
         env: Env,
         envelope_bytes: Bytes,
         sig_data: SignatureData,
@@ -215,7 +150,7 @@ impl Handler {
     ///
     /// No caller authorization is required — this is intentional. Security is enforced entirely
     /// through cryptographic signature verification of the envelope contents.
-    pub fn verify_xlm(
+    fn verify_xlm(
         env: Env,
         envelope_bytes: Bytes,
         sig_data: SignatureData,

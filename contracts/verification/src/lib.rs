@@ -1,13 +1,12 @@
 #![no_std]
 
 mod contract;
-mod security_client;
 pub mod storage;
 pub mod utils;
 
 pub use contract::Verification;
 pub use contract::VerificationClient;
-pub use contract::VerifyError;
+pub use warpdrive_shared::VerifyError;
 
 #[cfg(test)]
 mod tests;

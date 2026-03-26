@@ -2,9 +2,10 @@
 
 pub mod admin;
 pub mod checkpoint;
+pub mod interfaces;
 
-mod errors;
-pub use errors::VerifyError;
+// Re-export for backwards compatibility
+pub use interfaces::verification::VerifyError;
 
 #[cfg(feature = "testutils")]
 pub mod testutils;

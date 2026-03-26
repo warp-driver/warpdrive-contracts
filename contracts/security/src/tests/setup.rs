@@ -2,7 +2,7 @@ use crate::{Security, SecurityClient};
 use soroban_sdk::{Address, BytesN, Env, testutils::Address as _};
 
 mod contract_wasm {
-    use crate::storage::PubKey;
+    use warpdrive_shared::interfaces::PubKey;
 
     soroban_sdk::contractimport!(
         file = "../../target/wasm32v1-none/release/warpdrive_security.wasm"

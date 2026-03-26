@@ -1,70 +1,14 @@
-use enum_repr::EnumRepr;
-use soroban_sdk::{
-    Address, BytesN, Env, String, Vec, contract, contracterror, contractevent, contractimpl,
+use soroban_sdk::{Address, BytesN, Env, String, Vec, contract, contractimpl};
+
+use warpdrive_shared::interfaces::{
+    PubKey,
+    security::{
+        SecurityError, SecurityInterface, SignerAdded, SignerInfo, SignerRemoved, ThresholdSet,
+        Upgraded,
+    },
 };
 
-use crate::storage::{self, PubKey, SignerInfo, Threshold};
-
-#[contracterror]
-#[EnumRepr(type = "u32")]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-pub enum SecurityError {
-    ZeroDenominator = 1,
-    NumeratorExceedsDenominator = 2,
-    ZeroNumerator = 3,
-    ZeroWeight = 4,
-}
-
-#[contractevent]
-pub struct SignerAdded {
-    #[topic]
-    pub key: BytesN<33>,
-    pub weight: u64,
-}
-
-impl SignerAdded {
-    pub fn new(key: BytesN<33>, weight: u64) -> Self {
-        Self { key, weight }
-    }
-}
-
-#[contractevent]
-pub struct SignerRemoved {
-    #[topic]
-    pub key: BytesN<33>,
-}
-
-impl SignerRemoved {
-    pub fn new(key: BytesN<33>) -> Self {
-        Self { key }
-    }
-}
-
-#[contractevent]
-pub struct ThresholdSet {
-    pub numerator: u64,
-    pub denominator: u64,
-}
-
-impl ThresholdSet {
-    pub fn new(numerator: u64, denominator: u64) -> Self {
-        Self {
-            numerator,
-            denominator,
-        }
-    }
-}
-
-#[contractevent]
-pub struct Upgraded {
-    pub version: String,
-}
-
-impl Upgraded {
-    pub fn new(version: String) -> Self {
-        Self { version }
-    }
-}
+use crate::storage::{self, Threshold};
 
 #[contract]
 pub struct Security;
@@ -90,8 +34,11 @@ impl Security {
             &Threshold::new(threshold_numerator, threshold_denominator),
         );
     }
+}
 
-    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
+#[contractimpl]
+impl SecurityInterface for Security {
+    fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         storage::get_admin(&env).require_auth();
 
         storage::set_version(&env, &new_version);
@@ -99,28 +46,28 @@ impl Security {
         Upgraded::new(new_version).publish(&env);
     }
 
-    pub fn admin(env: Env) -> Address {
+    fn admin(env: Env) -> Address {
         storage::get_admin(&env)
     }
 
-    pub fn pending_admin(env: Env) -> Option<Address> {
+    fn pending_admin(env: Env) -> Option<Address> {
         warpdrive_shared::admin::pending(&env)
     }
 
-    pub fn propose_admin(env: Env, new_admin: Address) {
+    fn propose_admin(env: Env, new_admin: Address) {
         warpdrive_shared::admin::propose(&env, &storage::get_admin(&env), new_admin);
     }
 
-    pub fn accept_admin(env: Env) {
+    fn accept_admin(env: Env) {
         let new_admin = warpdrive_shared::admin::accept(&env);
         storage::set_admin(&env, &new_admin);
     }
 
-    pub fn version(env: Env) -> String {
+    fn version(env: Env) -> String {
         storage::get_version(&env)
     }
 
-    pub fn add_signer(env: Env, key: PubKey, weight: u64) -> Result<(), SecurityError> {
+    fn add_signer(env: Env, key: PubKey, weight: u64) -> Result<(), SecurityError> {
         storage::get_admin(&env).require_auth();
         if weight == 0 {
             return Err(SecurityError::ZeroWeight);
@@ -130,47 +77,47 @@ impl Security {
         Ok(())
     }
 
-    pub fn remove_signer(env: Env, key: PubKey) {
+    fn remove_signer(env: Env, key: PubKey) {
         storage::get_admin(&env).require_auth();
         storage::remove_signer(&env, key.clone());
         SignerRemoved::new(key).publish(&env);
     }
 
-    pub fn get_total_weight(env: Env) -> u64 {
+    fn get_total_weight(env: Env) -> u64 {
         storage::get_total_weight(&env)
     }
 
-    pub fn get_signer_weight(env: Env, key: PubKey) -> u64 {
+    fn get_signer_weight(env: Env, key: PubKey) -> u64 {
         storage::get_signer_weight(&env, key).unwrap_or(0)
     }
 
-    pub fn get_signer_weight_at(env: Env, key: PubKey, reference_block: u32) -> u64 {
+    fn get_signer_weight_at(env: Env, key: PubKey, reference_block: u32) -> u64 {
         storage::get_signer_weight_at(&env, key, reference_block)
     }
 
-    pub fn get_signer_weights(env: Env, keys: Vec<PubKey>) -> Vec<u64> {
+    fn get_signer_weights(env: Env, keys: Vec<PubKey>) -> Vec<u64> {
         storage::get_signer_weights(&env, &keys)
     }
 
-    pub fn get_signer_weights_at(env: Env, keys: Vec<PubKey>, reference_block: u32) -> Vec<u64> {
+    fn get_signer_weights_at(env: Env, keys: Vec<PubKey>, reference_block: u32) -> Vec<u64> {
         storage::get_signer_weights_at(&env, &keys, reference_block)
     }
 
-    pub fn get_total_weight_at(env: Env, reference_block: u32) -> u64 {
+    fn get_total_weight_at(env: Env, reference_block: u32) -> u64 {
         storage::get_total_weight_at(&env, reference_block)
     }
 
-    pub fn required_weight_at(env: Env, reference_block: u32) -> u64 {
+    fn required_weight_at(env: Env, reference_block: u32) -> u64 {
         let total = storage::get_total_weight_at(&env, reference_block);
         let threshold = storage::get_threshold(&env);
         ((total as u128) * (threshold.numerator as u128) / (threshold.denominator as u128)) as u64
     }
 
-    pub fn list_signers(env: Env) -> Vec<SignerInfo> {
+    fn list_signers(env: Env) -> Vec<SignerInfo> {
         storage::list_signers(&env)
     }
 
-    pub fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError> {
+    fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError> {
         storage::get_admin(&env).require_auth();
         if denominator == 0 {
             return Err(SecurityError::ZeroDenominator);
@@ -186,15 +133,15 @@ impl Security {
         Ok(())
     }
 
-    pub fn threshold_numerator(env: Env) -> u64 {
+    fn threshold_numerator(env: Env) -> u64 {
         storage::get_threshold(&env).numerator
     }
 
-    pub fn threshold_denominator(env: Env) -> u64 {
+    fn threshold_denominator(env: Env) -> u64 {
         storage::get_threshold(&env).denominator
     }
 
-    pub fn required_weight(env: Env) -> u64 {
+    fn required_weight(env: Env) -> u64 {
         let total = storage::get_total_weight(&env);
         let threshold = storage::get_threshold(&env);
         ((total as u128) * (threshold.numerator as u128) / (threshold.denominator as u128)) as u64
