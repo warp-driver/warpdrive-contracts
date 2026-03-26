@@ -17,6 +17,15 @@ pub struct Threshold {
     pub denominator: u64,
 }
 
+impl Threshold {
+    pub fn new(numerator: u64, denominator: u64) -> Self {
+        Threshold {
+            numerator,
+            denominator,
+        }
+    }
+}
+
 #[contracttype]
 #[derive(Clone)]
 pub struct StoredCheckpoint {

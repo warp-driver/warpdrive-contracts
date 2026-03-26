@@ -87,10 +87,7 @@ impl Security {
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_threshold(
             &env,
-            &Threshold {
-                numerator: threshold_numerator,
-                denominator: threshold_denominator,
-            },
+            &Threshold::new(threshold_numerator, threshold_denominator),
         );
     }
 
@@ -104,6 +101,19 @@ impl Security {
 
     pub fn admin(env: Env) -> Address {
         storage::get_admin(&env)
+    }
+
+    pub fn pending_admin(env: Env) -> Option<Address> {
+        warpdrive_shared::admin::pending(&env)
+    }
+
+    pub fn propose_admin(env: Env, new_admin: Address) {
+        warpdrive_shared::admin::propose(&env, &storage::get_admin(&env), new_admin);
+    }
+
+    pub fn accept_admin(env: Env) {
+        let new_admin = warpdrive_shared::admin::accept(&env);
+        storage::set_admin(&env, &new_admin);
     }
 
     pub fn version(env: Env) -> String {
@@ -160,11 +170,7 @@ impl Security {
         storage::list_signers(&env)
     }
 
-    pub fn set_threshold(
-        env: Env,
-        numerator: u64,
-        denominator: u64,
-    ) -> Result<(), SecurityError> {
+    pub fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError> {
         storage::get_admin(&env).require_auth();
         if denominator == 0 {
             return Err(SecurityError::ZeroDenominator);
@@ -175,13 +181,7 @@ impl Security {
         if numerator > denominator {
             return Err(SecurityError::NumeratorExceedsDenominator);
         }
-        storage::set_threshold(
-            &env,
-            &Threshold {
-                numerator,
-                denominator,
-            },
-        );
+        storage::set_threshold(&env, &Threshold::new(numerator, denominator));
         ThresholdSet::new(numerator, denominator).publish(&env);
         Ok(())
     }

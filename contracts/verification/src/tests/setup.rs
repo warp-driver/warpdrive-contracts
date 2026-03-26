@@ -3,7 +3,6 @@ use soroban_sdk::{Address, BytesN, Env, testutils::Address as _};
 use warpdrive_security::Security;
 
 mod contract_wasm {
-    use crate::VerifyError;
     use crate::utils::PubKey;
 
     soroban_sdk::contractimport!(

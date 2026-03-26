@@ -36,6 +36,19 @@ impl ProjectRoot {
         storage::get_admin(&env)
     }
 
+    pub fn pending_admin(env: Env) -> Option<Address> {
+        warpdrive_shared::admin::pending(&env)
+    }
+
+    pub fn propose_admin(env: Env, new_admin: Address) {
+        warpdrive_shared::admin::propose(&env, &storage::get_admin(&env), new_admin);
+    }
+
+    pub fn accept_admin(env: Env) {
+        let new_admin = warpdrive_shared::admin::accept(&env);
+        storage::set_admin(&env, &new_admin);
+    }
+
     pub fn version(env: Env) -> String {
         storage::get_version(&env)
     }
