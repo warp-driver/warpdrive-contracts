@@ -379,11 +379,11 @@ fn test_eth_refuses_xlm_packets() {
     let envelope = make_envelope_bytes_xlm(&env, 1);
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
-    // Must fail
-    client
-        .try_verify_eth(&envelope, &sig_data)
-        .unwrap_err()
-        .unwrap_err();
+    // Must fail with InvalidEnvelope — XLM data is not valid ABI
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::InvalidEnvelope)),
+    );
 
     // Must pass
     let result = client.try_verify_xlm(&envelope, &sig_data);
@@ -403,11 +403,8 @@ fn test_xlm_refuses_eth_packets() {
     let envelope = make_envelope_bytes_eth(&env, 1);
     let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
 
-    // Must fail
-    client
-        .try_verify_xlm(&envelope, &sig_data)
-        .unwrap_err()
-        .unwrap_err();
+    // Must fail — ETH data is not valid XDR (from_xdr panics at host level)
+    assert!(client.try_verify_xlm(&envelope, &sig_data).is_err());
 
     // Must pass
     let result = client.try_verify_eth(&envelope, &sig_data);
@@ -417,6 +414,34 @@ fn test_xlm_refuses_eth_packets() {
         client.payload(&expected_event_id(&env, 1)),
         Some(expected_payload(&env, 1))
     );
+}
+
+// ── M-3: Malformed envelope tests ───────────────────────────────────
+
+#[test]
+fn test_verify_eth_malformed_envelope() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let garbage = Bytes::from_slice(&env, &[0xDE, 0xAD, 0xBE, 0xEF]);
+    let sig_data = make_sig_data(&env, &garbage.to_alloc_vec(), &[(key2, pk2)]);
+
+    assert_eq!(
+        client.try_verify_eth(&garbage, &sig_data),
+        Err(Ok(HandlerError::InvalidEnvelope)),
+    );
+}
+
+#[test]
+fn test_verify_xlm_malformed_envelope() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let garbage = Bytes::from_slice(&env, &[0xDE, 0xAD, 0xBE, 0xEF]);
+    let sig_data = make_sig_data(&env, &garbage.to_alloc_vec(), &[(key2, pk2)]);
+
+    // from_xdr on garbage bytes fails
+    assert!(client.try_verify_xlm(&garbage, &sig_data).is_err());
 }
 
 // ── T-7: Remaining error propagation paths ──────────────────────────

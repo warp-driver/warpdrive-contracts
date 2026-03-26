@@ -1,5 +1,7 @@
 use enum_repr::EnumRepr;
-use soroban_sdk::{Address, BytesN, Env, String, Vec, contract, contracterror, contractimpl};
+use soroban_sdk::{
+    Address, BytesN, Env, String, Vec, contract, contracterror, contractevent, contractimpl,
+};
 
 use crate::storage::{self, PubKey, SignerInfo, Threshold};
 
@@ -11,6 +13,57 @@ pub enum SecurityError {
     NumeratorExceedsDenominator = 2,
     ZeroNumerator = 3,
     ZeroWeight = 4,
+}
+
+#[contractevent]
+pub struct SignerAdded {
+    #[topic]
+    pub key: BytesN<33>,
+    pub weight: u64,
+}
+
+impl SignerAdded {
+    pub fn new(key: BytesN<33>, weight: u64) -> Self {
+        Self { key, weight }
+    }
+}
+
+#[contractevent]
+pub struct SignerRemoved {
+    #[topic]
+    pub key: BytesN<33>,
+}
+
+impl SignerRemoved {
+    pub fn new(key: BytesN<33>) -> Self {
+        Self { key }
+    }
+}
+
+#[contractevent]
+pub struct ThresholdSet {
+    pub numerator: u64,
+    pub denominator: u64,
+}
+
+impl ThresholdSet {
+    pub fn new(numerator: u64, denominator: u64) -> Self {
+        Self {
+            numerator,
+            denominator,
+        }
+    }
+}
+
+#[contractevent]
+pub struct Upgraded {
+    pub version: String,
+}
+
+impl Upgraded {
+    pub fn new(version: String) -> Self {
+        Self { version }
+    }
 }
 
 #[contract]
@@ -46,6 +99,7 @@ impl Security {
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Upgraded::new(new_version).publish(&env);
     }
 
     pub fn admin(env: Env) -> Address {
@@ -61,13 +115,15 @@ impl Security {
         if weight == 0 {
             return Err(SecurityError::ZeroWeight);
         }
-        storage::add_signer(&env, key, weight);
+        storage::add_signer(&env, key.clone(), weight);
+        SignerAdded::new(key, weight).publish(&env);
         Ok(())
     }
 
     pub fn remove_signer(env: Env, key: PubKey) {
         storage::get_admin(&env).require_auth();
-        storage::remove_signer(&env, key);
+        storage::remove_signer(&env, key.clone());
+        SignerRemoved::new(key).publish(&env);
     }
 
     pub fn get_total_weight(env: Env) -> u64 {
@@ -126,6 +182,7 @@ impl Security {
                 denominator,
             },
         );
+        ThresholdSet::new(numerator, denominator).publish(&env);
         Ok(())
     }
 

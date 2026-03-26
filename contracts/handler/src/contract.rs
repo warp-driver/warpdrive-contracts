@@ -1,7 +1,7 @@
 use enum_repr::EnumRepr;
 use soroban_sdk::{
-    Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractimpl, contracttype,
-    xdr::FromXdr,
+    Address, Bytes, BytesN, Env, String, Vec, contract, contracterror, contractevent, contractimpl,
+    contracttype, xdr::FromXdr,
 };
 
 use crate::envelope::Envelope as EthEnvelope;
@@ -32,6 +32,7 @@ pub enum HandlerError {
     // Errors from the handler itself
     EventAlreadySeen = 1,
     InvalidReferenceBlock = 2,
+    InvalidEnvelope = 3,
 
     // Some numbers intentionally skipped...
     UnknownVerificationError = 20,
@@ -42,6 +43,29 @@ pub enum HandlerError {
     EmptySignatures = 24,
     LengthMismatch = 25,
     SignersNotOrdered = 26,
+}
+
+#[contractevent]
+pub struct Verified {
+    #[topic]
+    pub event_id: BytesN<20>,
+}
+
+impl Verified {
+    pub fn new(event_id: BytesN<20>) -> Self {
+        Self { event_id }
+    }
+}
+
+#[contractevent]
+pub struct HandlerUpgraded {
+    pub version: String,
+}
+
+impl HandlerUpgraded {
+    pub fn new(version: String) -> Self {
+        Self { version }
+    }
 }
 
 impl From<VerifyError> for HandlerError {
@@ -111,6 +135,7 @@ impl Handler {
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
+        HandlerUpgraded::new(new_version).publish(&env);
     }
 
     pub fn admin(env: Env) -> Address {
@@ -141,7 +166,8 @@ impl Handler {
         validate_reference_block(&env, sig_data.reference_block)?;
 
         // Parse the ABI-encoded envelope
-        let envelope = EthEnvelope::abi_decode_from(&envelope_bytes);
+        let envelope =
+            EthEnvelope::abi_decode_from(&envelope_bytes).ok_or(HandlerError::InvalidEnvelope)?;
         let event_id = BytesN::from_array(&env, &envelope.eventId.0);
 
         // Check for duplicate event
@@ -165,7 +191,9 @@ impl Handler {
 
         // Save payload
         let payload = Bytes::from_slice(&env, envelope.payload.as_ref());
-        storage::save_payload(&env, event_id, payload);
+        storage::save_payload(&env, event_id.clone(), payload);
+
+        Verified::new(event_id).publish(&env);
 
         Ok(())
     }
@@ -182,7 +210,8 @@ impl Handler {
         validate_reference_block(&env, sig_data.reference_block)?;
 
         // Parse XDR bytes into the typed envelope
-        let envelope = XlmEnvelope::from_xdr(&env, &envelope_bytes).expect("invalid XLM envelope");
+        let envelope = XlmEnvelope::from_xdr(&env, &envelope_bytes)
+            .map_err(|_| HandlerError::InvalidEnvelope)?;
         let event_id = envelope.event_id;
 
         // Check for duplicate event
@@ -205,7 +234,9 @@ impl Handler {
         storage::mark_event_seen(&env, &event_id);
 
         // Save payload
-        storage::save_payload(&env, event_id, envelope.payload);
+        storage::save_payload(&env, event_id.clone(), envelope.payload);
+
+        Verified::new(event_id).publish(&env);
 
         Ok(())
     }

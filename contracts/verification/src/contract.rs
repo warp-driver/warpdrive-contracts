@@ -1,10 +1,23 @@
-use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contractimpl};
+use soroban_sdk::{
+    Address, Bytes, BytesN, Env, String, Vec, contract, contractevent, contractimpl,
+};
 pub use warpdrive_shared::VerifyError;
 
 use crate::security_client::SecurityClient;
 
 use crate::storage;
 use crate::utils::{self, PubKey};
+
+#[contractevent]
+pub struct VerificationUpgraded {
+    pub version: String,
+}
+
+impl VerificationUpgraded {
+    pub fn new(version: String) -> Self {
+        Self { version }
+    }
+}
 
 #[contract]
 pub struct Verification;
@@ -23,6 +36,7 @@ impl Verification {
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
+        VerificationUpgraded::new(new_version).publish(&env);
     }
 
     pub fn admin(env: Env) -> Address {

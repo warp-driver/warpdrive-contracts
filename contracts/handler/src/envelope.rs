@@ -12,10 +12,9 @@ sol! {
 }
 
 impl Envelope {
-    pub fn abi_decode_from(data: &Bytes) -> Self {
+    pub fn abi_decode_from(data: &Bytes) -> Option<Self> {
         let mut buf = alloc::vec![0u8; data.len() as usize];
         data.copy_into_slice(&mut buf);
-        <Envelope as alloy_sol_types::SolValue>::abi_decode(&buf)
-            .expect("invalid ABI-encoded Envelope")
+        <Envelope as alloy_sol_types::SolValue>::abi_decode(&buf).ok()
     }
 }

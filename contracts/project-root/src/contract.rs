@@ -1,6 +1,17 @@
-use soroban_sdk::{Address, BytesN, Env, String, contract, contractimpl};
+use soroban_sdk::{Address, BytesN, Env, String, contract, contractevent, contractimpl};
 
 use crate::storage;
+
+#[contractevent]
+pub struct ProjectRootUpgraded {
+    pub version: String,
+}
+
+impl ProjectRootUpgraded {
+    pub fn new(version: String) -> Self {
+        Self { version }
+    }
+}
 
 #[contract]
 pub struct ProjectRoot;
@@ -18,6 +29,7 @@ impl ProjectRoot {
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
+        ProjectRootUpgraded::new(new_version).publish(&env);
     }
 
     pub fn admin(env: Env) -> Address {
