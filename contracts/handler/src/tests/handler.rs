@@ -419,6 +419,137 @@ fn test_xlm_refuses_eth_packets() {
     );
 }
 
+// ── T-7: Remaining error propagation paths ──────────────────────────
+
+#[test]
+fn test_verify_empty_signatures_fails() {
+    let env = Env::default();
+    let (client, _key1, _pk1, _key2, _pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+
+    let sig_data = SignatureData {
+        signers: Vec::new(&env),
+        signatures: Vec::new(&env),
+        reference_block: TEST_REF_BLOCK,
+    };
+
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::EmptySignatures)),
+    );
+}
+
+#[test]
+fn test_verify_length_mismatch_fails() {
+    let env = Env::default();
+    let (client, key1, pk1, _key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    let raw = envelope.to_alloc_vec();
+    let sig_bytes = sign_envelope(&key1, &raw);
+
+    // One signature, two pubkeys
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(pk1);
+    signers.push_back(pk2);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &sig_bytes));
+
+    let sig_data = SignatureData {
+        signers,
+        signatures,
+        reference_block: TEST_REF_BLOCK,
+    };
+
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::LengthMismatch)),
+    );
+}
+
+#[test]
+fn test_verify_signers_not_ordered_fails() {
+    let env = Env::default();
+    let (client, key1, pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    let raw = envelope.to_alloc_vec();
+    let sig1 = sign_envelope(&key1, &raw);
+    let sig2 = sign_envelope(&key2, &raw);
+
+    // Determine correct order, then reverse it
+    let (lo_pk, lo_sig, hi_pk, hi_sig) = if pk1.to_array() < pk2.to_array() {
+        (pk1, sig1, pk2, sig2)
+    } else {
+        (pk2, sig2, pk1, sig1)
+    };
+
+    // Provide in descending order (wrong)
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(hi_pk);
+    signers.push_back(lo_pk);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &hi_sig));
+    signatures.push_back(BytesN::from_array(&env, &lo_sig));
+
+    let sig_data = SignatureData {
+        signers,
+        signatures,
+        reference_block: TEST_REF_BLOCK,
+    };
+
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::SignersNotOrdered)),
+    );
+}
+
+#[test]
+fn test_verify_signer_not_registered_fails() {
+    let env = Env::default();
+    let (client, _key1, _pk1, _key2, _pk2) = setup_handler_with_signers(&env);
+
+    let key3 = make_signing_key(3);
+    let pk3 = compressed_pubkey(&env, &key3);
+
+    let envelope = make_envelope_bytes_eth(&env, 1);
+    let raw = envelope.to_alloc_vec();
+    let sig3 = sign_envelope(&key3, &raw);
+
+    let mut signers: Vec<PubKey> = Vec::new(&env);
+    signers.push_back(pk3);
+    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &sig3));
+
+    let sig_data = SignatureData {
+        signers,
+        signatures,
+        reference_block: TEST_REF_BLOCK,
+    };
+
+    assert_eq!(
+        client.try_verify_eth(&envelope, &sig_data),
+        Err(Ok(HandlerError::SignerNotRegistered)),
+    );
+}
+
+// ── T-8: verification_contract getter ───────────────────────────────
+
+#[test]
+fn test_verification_contract_getter() {
+    let env = Env::default();
+    let admin = soroban_sdk::Address::generate(&env);
+
+    env.ledger().set_sequence_number(TEST_REF_BLOCK);
+    let security_id = env.register(Security, (&admin, 55u64, 100u64));
+    let verification_id = env.register(Verification, (&admin, &security_id));
+    let handler_id = env.register(Handler, (&admin, &verification_id));
+    let client = HandlerClient::new(&env, &handler_id);
+
+    assert_eq!(client.verification_contract(), verification_id);
+}
+
 /********************* REFERENCE BLOCK VALIDATION **************************/
 
 #[test]

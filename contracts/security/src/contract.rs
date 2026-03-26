@@ -42,8 +42,7 @@ impl Security {
     }
 
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
-        let admin = storage::get_admin(&env);
-        admin.require_auth();
+        storage::get_admin(&env).require_auth();
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);

@@ -193,6 +193,48 @@ fn test_check_one_with_reference_block() {
     assert_eq!(result, Ok(Ok(250)));
 }
 
+// ── T-2: All-zero signature rejection ───────────────────────────────
+
+#[test]
+fn test_zero_signature_rejected() {
+    let env = Env::default();
+    let (verification, _security) = setup_contracts(&env);
+
+    let key2 = make_signing_key(2);
+    let pubkey2 = compressed_pubkey(&env, &key2);
+
+    let envelope = Bytes::from_slice(&env, b"hello world");
+    let zero_sig = BytesN::from_array(&env, &[0u8; 65]);
+
+    let result = verification.try_check_one(&envelope, &zero_sig, &pubkey2, &None);
+    assert_eq!(result, Err(Ok(VerifyError::InvalidSignature)));
+}
+
+// ── T-3: Recovery ID 0/1 normalization ──────────────────────────────
+
+#[test]
+fn test_verify_with_raw_recovery_id() {
+    let env = Env::default();
+    let (verification, _security) = setup_contracts(&env);
+
+    let key2 = make_signing_key(2);
+    let pubkey2 = compressed_pubkey(&env, &key2);
+
+    let message = b"hello world";
+    let mut sig_bytes = sign_envelope(&key2, message);
+
+    // sign_envelope produces v=27 or v=28. Normalize to 0/1 to test that path.
+    let v = sig_bytes[64];
+    assert!(v == 27 || v == 28, "expected Ethereum-format recovery ID");
+    sig_bytes[64] = v - 27; // convert to raw 0 or 1
+
+    let envelope = Bytes::from_slice(&env, message);
+    let signature = BytesN::from_array(&env, &sig_bytes);
+
+    let result = verification.try_check_one(&envelope, &signature, &pubkey2, &None);
+    assert_eq!(result, Ok(Ok(200)));
+}
+
 // ── verify (multi-sig) tests ────────────────────────────────────────
 
 /// Return (lo_key, lo_pubkey, hi_key, hi_pubkey) where lo < hi by byte order.
