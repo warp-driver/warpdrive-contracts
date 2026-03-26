@@ -80,6 +80,7 @@ impl Upgraded {
 
 // ── Interface trait (compile-time contract conformance) ──────────────
 
+#[contractclient(name = "SecurityClient")]
 pub trait SecurityInterface {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String);
     fn admin(env: Env) -> Address;
@@ -101,17 +102,4 @@ pub trait SecurityInterface {
     fn threshold_numerator(env: Env) -> u64;
     fn threshold_denominator(env: Env) -> u64;
     fn required_weight(env: Env) -> u64;
-}
-
-// ── Client trait (cross-contract calls) ──────────────────────────────
-
-#[contractclient(name = "SecurityClient")]
-#[allow(dead_code)]
-pub trait SecurityClientInterface {
-    fn get_signer_weight(env: Env, key: PubKey) -> u64;
-    fn required_weight(env: Env) -> u64;
-    fn get_signer_weight_at(env: Env, key: PubKey, reference_block: u32) -> u64;
-    fn get_signer_weights(env: Env, keys: Vec<PubKey>) -> Vec<u64>;
-    fn get_signer_weights_at(env: Env, keys: Vec<PubKey>, reference_block: u32) -> Vec<u64>;
-    fn required_weight_at(env: Env, reference_block: u32) -> u64;
 }
