@@ -32,13 +32,13 @@ pub fn push<S: VecHistoryStore>(store: &S, value: S::Value) {
     let mut entries = store.load();
     let ledger = store.current_ledger();
 
-    if let Some(last) = entries.last_mut() {
-        if last.ledger == ledger {
-            last.value = value;
-            prune(&mut entries, ledger, store.cutoff());
-            store.save(entries);
-            return;
-        }
+    if let Some(last) = entries.last_mut()
+        && last.ledger == ledger
+    {
+        last.value = value;
+        prune(&mut entries, ledger, store.cutoff());
+        store.save(entries);
+        return;
     }
 
     entries.push(Entry { ledger, value });
