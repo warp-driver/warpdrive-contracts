@@ -5,8 +5,8 @@ vars:
   WASM_DIR: target/{{.WASM_TARGET}}/release
   CONTRACTS:
     - project-root
-    - security
-    - verification
+    - secp256k1-security
+    - secp256k1-verification
     - handler
 
 tasks:

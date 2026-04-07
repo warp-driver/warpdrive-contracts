@@ -1,6 +1,6 @@
 extern crate std;
 
-use crate::storage::PubKey;
+use crate::storage::CompressedSecpPubKey;
 
 use super::setup::deploy_contract;
 use soroban_sdk::{
@@ -11,7 +11,7 @@ use warpdrive_shared::testutils::{compressed_pubkey, make_signing_key};
 
 // ── T-11: Use valid compressed pubkeys ──────────────────────────────
 
-fn make_signer(env: &Env, seed: u8) -> PubKey {
+fn make_signer(env: &Env, seed: u8) -> CompressedSecpPubKey {
     compressed_pubkey(env, &make_signing_key(seed))
 }
 

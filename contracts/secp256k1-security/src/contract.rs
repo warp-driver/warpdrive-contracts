@@ -1,9 +1,10 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec, contract, contractimpl};
 
 use warpdrive_shared::interfaces::{
-    PubKey,
+    CompressedSecpPubKey,
     security::{
-        SecurityError, SecurityInterface, SignerAdded, SignerInfo, SignerRemoved, ThresholdSet,
+        Secp256k1SecurityInterface, SecurityError, SignerAdded, SignerInfo, SignerRemoved,
+        ThresholdSet,
     },
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
@@ -11,10 +12,10 @@ use warpdrive_shared::interfaces::{
 use crate::storage::{self, Threshold};
 
 #[contract]
-pub struct Security;
+pub struct Secp256k1Security;
 
 #[contractimpl]
-impl Security {
+impl Secp256k1Security {
     pub fn __constructor(
         env: Env,
         admin: Address,
@@ -42,7 +43,7 @@ impl Security {
 }
 
 #[contractimpl]
-impl WarpDriveInterface for Security {
+impl WarpDriveInterface for Secp256k1Security {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         storage::get_admin(&env).require_auth();
 
@@ -75,8 +76,8 @@ impl WarpDriveInterface for Security {
 }
 
 #[contractimpl]
-impl SecurityInterface for Security {
-    fn add_signer(env: Env, key: PubKey, weight: u64) -> Result<(), SecurityError> {
+impl Secp256k1SecurityInterface for Secp256k1Security {
+    fn add_signer(env: Env, key: CompressedSecpPubKey, weight: u64) -> Result<(), SecurityError> {
         storage::get_admin(&env).require_auth();
         if weight == 0 {
             return Err(SecurityError::ZeroWeight);
@@ -87,7 +88,7 @@ impl SecurityInterface for Security {
         Ok(())
     }
 
-    fn remove_signer(env: Env, key: PubKey) {
+    fn remove_signer(env: Env, key: CompressedSecpPubKey) {
         storage::get_admin(&env).require_auth();
         storage::extend_instance_ttl(&env);
         storage::remove_signer(&env, key.clone());
@@ -114,19 +115,23 @@ impl SecurityInterface for Security {
         storage::get_total_weight(&env)
     }
 
-    fn get_signer_weight(env: Env, key: PubKey) -> u64 {
+    fn get_signer_weight(env: Env, key: CompressedSecpPubKey) -> u64 {
         storage::get_signer_weight(&env, key).unwrap_or(0)
     }
 
-    fn get_signer_weight_at(env: Env, key: PubKey, reference_block: u32) -> u64 {
+    fn get_signer_weight_at(env: Env, key: CompressedSecpPubKey, reference_block: u32) -> u64 {
         storage::get_signer_weight_at(&env, key, reference_block)
     }
 
-    fn get_signer_weights(env: Env, keys: Vec<PubKey>) -> Vec<u64> {
+    fn get_signer_weights(env: Env, keys: Vec<CompressedSecpPubKey>) -> Vec<u64> {
         storage::get_signer_weights(&env, &keys)
     }
 
-    fn get_signer_weights_at(env: Env, keys: Vec<PubKey>, reference_block: u32) -> Vec<u64> {
+    fn get_signer_weights_at(
+        env: Env,
+        keys: Vec<CompressedSecpPubKey>,
+        reference_block: u32,
+    ) -> Vec<u64> {
         storage::get_signer_weights_at(&env, &keys, reference_block)
     }
 

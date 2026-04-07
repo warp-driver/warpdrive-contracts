@@ -7,12 +7,12 @@ use alloy_primitives::FixedBytes;
 use alloy_sol_types::SolValue;
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
-use warpdrive_security::{Security, SecurityClient};
+use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
 use warpdrive_shared::interfaces::handler::XlmEnvelope;
 use warpdrive_shared::testutils::{
     PubKey, SigningKey, compressed_pubkey, make_signing_key, sign_envelope,
 };
-use warpdrive_verification::Verification;
+use warpdrive_secp256k1_verification::Secp256k1Verification;
 
 /// Reference block used by default in tests — signers are registered at this ledger.
 const TEST_REF_BLOCK: u32 = 10;
@@ -73,12 +73,12 @@ fn setup_handler_with_signers(
     // Register signers at TEST_REF_BLOCK so checkpoints are recorded there
     env.ledger().set_sequence_number(TEST_REF_BLOCK);
 
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &100);
     security.mock_all_auths().add_signer(&pk2, &200);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
     let handler_id = env.register(Handler, (&admin, &verification_id));
     let client = HandlerClient::new(env, &handler_id);
 
@@ -567,8 +567,8 @@ fn test_verification_contract_getter() {
     let admin = soroban_sdk::Address::generate(&env);
 
     env.ledger().set_sequence_number(TEST_REF_BLOCK);
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let verification_id = env.register(Verification, (&admin, &security_id));
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
     let handler_id = env.register(Handler, (&admin, &verification_id));
     let client = HandlerClient::new(&env, &handler_id);
 
@@ -648,12 +648,12 @@ fn test_verify_historical_passes_current_fails() {
 
     // Ledger 10: key1=100, key2=200, total=300, required=165
     env.ledger().set_sequence_number(10);
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(&env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(&env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &100);
     security.mock_all_auths().add_signer(&pk2, &200);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
     let handler_id = env.register(Handler, (&admin, &verification_id));
     let client = HandlerClient::new(&env, &handler_id);
 
@@ -711,12 +711,12 @@ fn test_verify_historical_fails_current_passes() {
 
     // Ledger 10: key1=50, key2=200, total=250, required=137, key1 alone=50 < 137
     env.ledger().set_sequence_number(10);
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(&env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(&env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &50);
     security.mock_all_auths().add_signer(&pk2, &200);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
     let handler_id = env.register(Handler, (&admin, &verification_id));
     let client = HandlerClient::new(&env, &handler_id);
 

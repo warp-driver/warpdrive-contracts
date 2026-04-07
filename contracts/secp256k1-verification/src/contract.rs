@@ -1,9 +1,9 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contractimpl};
 
 use warpdrive_shared::interfaces::{
-    PubKey,
-    security::SecurityClient,
-    verification::{VerificationInterface, VerifyError},
+    CompressedSecpPubKey,
+    security::Secp256k1SecurityClient,
+    verification::{Secp256k1VerificationInterface, VerifyError},
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
@@ -11,10 +11,10 @@ use crate::storage;
 use crate::utils;
 
 #[contract]
-pub struct Verification;
+pub struct Secp256k1Verification;
 
 #[contractimpl]
-impl Verification {
+impl Secp256k1Verification {
     pub fn __constructor(env: Env, admin: Address, security_contract: Address) {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
@@ -24,7 +24,7 @@ impl Verification {
 }
 
 #[contractimpl]
-impl WarpDriveInterface for Verification {
+impl WarpDriveInterface for Secp256k1Verification {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
@@ -58,26 +58,26 @@ impl WarpDriveInterface for Verification {
 }
 
 #[contractimpl]
-impl VerificationInterface for Verification {
+impl Secp256k1VerificationInterface for Secp256k1Verification {
     fn security_contract(env: Env) -> Address {
         storage::get_security_contract(&env)
     }
 
     fn required_weight(env: Env) -> u64 {
         let security_addr = storage::get_security_contract(&env);
-        SecurityClient::new(&env, &security_addr).required_weight()
+        Secp256k1SecurityClient::new(&env, &security_addr).required_weight()
     }
 
-    fn signer_weight(env: Env, signer_pubkey: PubKey) -> u64 {
+    fn signer_weight(env: Env, signer_pubkey: CompressedSecpPubKey) -> u64 {
         let security_addr = storage::get_security_contract(&env);
-        SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
+        Secp256k1SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
     }
 
     fn check_one(
         env: Env,
         envelope: Bytes,
         signature: BytesN<65>,
-        signer_pubkey: PubKey,
+        signer_pubkey: CompressedSecpPubKey,
         reference_block: Option<u32>,
     ) -> Result<u64, VerifyError> {
         if !utils::is_valid_signature(&env, &envelope, &signature, &signer_pubkey) {
@@ -85,7 +85,7 @@ impl VerificationInterface for Verification {
         }
 
         let security_addr = storage::get_security_contract(&env);
-        let security = SecurityClient::new(&env, &security_addr);
+        let security = Secp256k1SecurityClient::new(&env, &security_addr);
 
         let weight = match reference_block {
             Some(block) => security.get_signer_weight_at(&signer_pubkey, &block),
@@ -102,7 +102,7 @@ impl VerificationInterface for Verification {
         env: Env,
         envelope: Bytes,
         signatures: Vec<BytesN<65>>,
-        signer_pubkeys: Vec<PubKey>,
+        signer_pubkeys: Vec<CompressedSecpPubKey>,
         reference_block: u32,
     ) -> Result<(), VerifyError> {
         storage::extend_instance_ttl(&env);
@@ -115,7 +115,7 @@ impl VerificationInterface for Verification {
         }
 
         let security_addr = storage::get_security_contract(&env);
-        let security = SecurityClient::new(&env, &security_addr);
+        let security = Secp256k1SecurityClient::new(&env, &security_addr);
         let weights = security.get_signer_weights_at(&signer_pubkeys, &reference_block);
         let required = security.required_weight_at(&reference_block);
 
@@ -124,7 +124,7 @@ impl VerificationInterface for Verification {
         }
 
         let mut total_weight: u64 = 0;
-        let mut prev_pubkey: Option<PubKey> = None;
+        let mut prev_pubkey: Option<CompressedSecpPubKey> = None;
 
         for i in 0..signatures.len() {
             let sig = signatures.get(i).unwrap();

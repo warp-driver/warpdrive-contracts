@@ -1,13 +1,13 @@
 extern crate std;
 
-use crate::{Verification, VerificationClient, VerifyError};
+use crate::{Secp256k1Verification, Secp256k1VerificationClient, VerifyError};
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
-use warpdrive_security::{Security, SecurityClient};
+use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
 use warpdrive_shared::testutils::{
     PubKey, SigningKey, compressed_pubkey, make_signing_key, sign_envelope,
 };
 
-fn setup_contracts(env: &Env) -> (VerificationClient<'_>, SecurityClient<'_>) {
+fn setup_contracts(env: &Env) -> (Secp256k1VerificationClient<'_>, Secp256k1SecurityClient<'_>) {
     let admin = soroban_sdk::Address::generate(env);
 
     let key1 = make_signing_key(1);
@@ -17,8 +17,8 @@ fn setup_contracts(env: &Env) -> (VerificationClient<'_>, SecurityClient<'_>) {
     env.ledger().with_mut(|li| li.sequence_number = 100);
 
     // Deploy security contract with threshold 55/100
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(env, &security_id);
 
     // key1 weight 100, key2 weight 200
     security
@@ -29,8 +29,8 @@ fn setup_contracts(env: &Env) -> (VerificationClient<'_>, SecurityClient<'_>) {
         .add_signer(&compressed_pubkey(env, &key2), &200);
 
     // Deploy verification contract referencing the security contract
-    let verification_id = env.register(Verification, (&admin, &security_id));
-    let verification = VerificationClient::new(env, &verification_id);
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
+    let verification = Secp256k1VerificationClient::new(env, &verification_id);
 
     // Advance ledger past the checkpoint
     env.ledger().with_mut(|li| li.sequence_number = 200);
@@ -161,12 +161,12 @@ fn test_check_one_with_reference_block() {
 
     // Ledger 100: key1 weight 100
     env.ledger().with_mut(|li| li.sequence_number = 100);
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(&env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(&env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &100);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
-    let verification = VerificationClient::new(&env, &verification_id);
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
+    let verification = Secp256k1VerificationClient::new(&env, &verification_id);
 
     // Ledger 150: update key1 weight to 250
     env.ledger().with_mut(|li| li.sequence_number = 150);
@@ -410,13 +410,13 @@ fn test_verify_multi_insufficient_total_weight() {
 
     // key1 weight 100, key2 weight 200 — total 300, required = 300 * 55 / 100 = 165
     // key1 alone = 100 < 165
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(&env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(&env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &100);
     security.mock_all_auths().add_signer(&pk2, &200);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
-    let verification = VerificationClient::new(&env, &verification_id);
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
+    let verification = Secp256k1VerificationClient::new(&env, &verification_id);
 
     // Advance ledger past the checkpoint
     env.ledger().with_mut(|li| li.sequence_number = 200);
@@ -475,13 +475,13 @@ fn test_verify_historical_passes_current_fails() {
     // total=300, required=300*55/100=165, key2 alone=200 >= 165 passes
     env.ledger().with_mut(|li| li.sequence_number = 100);
 
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(&env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(&env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &100);
     security.mock_all_auths().add_signer(&pk2, &200);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
-    let verification = VerificationClient::new(&env, &verification_id);
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
+    let verification = Secp256k1VerificationClient::new(&env, &verification_id);
 
     // Ledger 150: update key2 weight to 50
     // total=150, required=150*55/100=82, key2 alone=50 < 82 fails
@@ -523,13 +523,13 @@ fn test_verify_historical_fails_current_passes() {
     // total=250, required=250*55/100=137, key1 alone=50 < 137 fails
     env.ledger().with_mut(|li| li.sequence_number = 100);
 
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(&env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(&env, &security_id);
     security.mock_all_auths().add_signer(&pk1, &50);
     security.mock_all_auths().add_signer(&pk2, &200);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
-    let verification = VerificationClient::new(&env, &verification_id);
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
+    let verification = Secp256k1VerificationClient::new(&env, &verification_id);
 
     // Ledger 150: update key1 to 200 and remove key2
     // total=200, required=200*55/100=110, key1 alone=200 >= 110 passes

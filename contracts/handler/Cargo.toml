@@ -18,7 +18,7 @@ warpdrive-shared = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-warpdrive-security = { workspace = true }
-warpdrive-verification = { workspace = true }
+warpdrive-secp256k1-security = { workspace = true }
+warpdrive-secp256k1-verification = { workspace = true }
 warpdrive-shared = { workspace = true, features = ["testutils"] }
 hex-literal = { workspace = true }

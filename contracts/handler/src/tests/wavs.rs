@@ -4,8 +4,8 @@
 use crate::{Handler, HandlerClient, HandlerError, SignatureData};
 use hex_literal::hex;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
-use warpdrive_security::{Security, SecurityClient};
-use warpdrive_verification::Verification;
+use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
+use warpdrive_secp256k1_verification::Secp256k1Verification;
 
 /*
 From `cargo test evm_client::signing::test::envelope_test_vector` in wavs/packages/utils:
@@ -56,11 +56,11 @@ fn setup_handler_with_signer<'a>(env: &'a Env, pubkey: &[u8; 33]) -> HandlerClie
 
     env.ledger().set_sequence_number(TEST_REF_BLOCK);
 
-    let security_id = env.register(Security, (&admin, 55u64, 100u64));
-    let security = SecurityClient::new(env, &security_id);
+    let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
+    let security = Secp256k1SecurityClient::new(env, &security_id);
     security.mock_all_auths().add_signer(&pk, &100);
 
-    let verification_id = env.register(Verification, (&admin, &security_id));
+    let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
     let handler_id = env.register(Handler, (&admin, &verification_id));
 
     env.ledger().set_sequence_number(100);

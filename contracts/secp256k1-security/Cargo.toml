@@ -1,5 +1,5 @@
 [package]
-name = "warpdrive-security"
+name = "warpdrive-secp256k1-security"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

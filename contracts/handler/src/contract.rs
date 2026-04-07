@@ -2,7 +2,7 @@ use soroban_sdk::{Address, Bytes, BytesN, Env, String, contract, contractimpl, x
 
 use warpdrive_shared::interfaces::{
     handler::{HandlerError, HandlerInterface, SignatureData, Verified, XlmEnvelope},
-    verification::{VerificationClient, VerifyError},
+    verification::{Secp256k1VerificationClient, VerifyError},
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
@@ -121,7 +121,7 @@ impl HandlerInterface for Handler {
 
         // Verify signatures via the verification contract
         let verification_addr = storage::get_verification_contract(&env);
-        let verification = VerificationClient::new(&env, &verification_addr);
+        let verification = Secp256k1VerificationClient::new(&env, &verification_addr);
         let res = verification.try_verify(
             &envelope_bytes,
             &sig_data.signatures,
@@ -166,7 +166,7 @@ impl HandlerInterface for Handler {
 
         // Verify signatures against the raw envelope bytes (what was actually signed)
         let verification_addr = storage::get_verification_contract(&env);
-        let verification = VerificationClient::new(&env, &verification_addr);
+        let verification = Secp256k1VerificationClient::new(&env, &verification_addr);
         let res = verification.try_verify(
             &envelope_bytes,
             &sig_data.signatures,

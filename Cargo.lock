@@ -1900,9 +1900,9 @@ dependencies = [
  "alloy-sol-types",
  "hex-literal",
  "soroban-sdk",
- "warpdrive-security",
+ "warpdrive-secp256k1-security",
+ "warpdrive-secp256k1-verification",
  "warpdrive-shared",
- "warpdrive-verification",
 ]
 
 [[package]]
@@ -1910,16 +1910,25 @@ name = "warpdrive-project-root"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",
- "warpdrive-security",
+ "warpdrive-secp256k1-security",
+ "warpdrive-secp256k1-verification",
  "warpdrive-shared",
- "warpdrive-verification",
 ]
 
 [[package]]
-name = "warpdrive-security"
+name = "warpdrive-secp256k1-security"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",
+ "warpdrive-shared",
+]
+
+[[package]]
+name = "warpdrive-secp256k1-verification"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "warpdrive-secp256k1-security",
  "warpdrive-shared",
 ]
 
@@ -1930,15 +1939,6 @@ dependencies = [
  "k256",
  "sha3",
  "soroban-sdk",
-]
-
-[[package]]
-name = "warpdrive-verification"
-version = "0.1.0"
-dependencies = [
- "soroban-sdk",
- "warpdrive-security",
- "warpdrive-shared",
 ]
 
 [[package]]

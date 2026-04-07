@@ -1,6 +1,6 @@
 use soroban_sdk::{Env, Vec, contractclient, contracterror, contractevent, contracttype};
 
-use super::PubKey;
+use super::CompressedSecpPubKey;
 use super::warpdrive::WarpDriveInterface;
 
 // ── Error ────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ pub enum SecurityError {
 
 #[contracttype]
 pub struct SignerInfo {
-    pub key: PubKey,
+    pub key: CompressedSecpPubKey,
     pub weight: u64,
 }
 
@@ -29,12 +29,12 @@ pub struct SignerInfo {
 #[contractevent]
 pub struct SignerAdded {
     #[topic]
-    pub key: PubKey,
+    pub key: CompressedSecpPubKey,
     pub weight: u64,
 }
 
 impl SignerAdded {
-    pub fn new(key: PubKey, weight: u64) -> Self {
+    pub fn new(key: CompressedSecpPubKey, weight: u64) -> Self {
         Self { key, weight }
     }
 }
@@ -42,11 +42,11 @@ impl SignerAdded {
 #[contractevent]
 pub struct SignerRemoved {
     #[topic]
-    pub key: PubKey,
+    pub key: CompressedSecpPubKey,
 }
 
 impl SignerRemoved {
-    pub fn new(key: PubKey) -> Self {
+    pub fn new(key: CompressedSecpPubKey) -> Self {
         Self { key }
     }
 }
@@ -68,19 +68,23 @@ impl ThresholdSet {
 
 // ── Interface trait (compile-time contract conformance) ──────────────
 
-#[contractclient(name = "SecurityClient")]
-pub trait SecurityInterface: WarpDriveInterface {
+#[contractclient(name = "Secp256k1SecurityClient")]
+pub trait Secp256k1SecurityInterface: WarpDriveInterface {
     // State Changing Operations
-    fn add_signer(env: Env, key: PubKey, weight: u64) -> Result<(), SecurityError>;
-    fn remove_signer(env: Env, key: PubKey);
+    fn add_signer(env: Env, key: CompressedSecpPubKey, weight: u64) -> Result<(), SecurityError>;
+    fn remove_signer(env: Env, key: CompressedSecpPubKey);
     fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError>;
 
     // Queries
     fn get_total_weight(env: Env) -> u64;
-    fn get_signer_weight(env: Env, key: PubKey) -> u64;
-    fn get_signer_weight_at(env: Env, key: PubKey, reference_block: u32) -> u64;
-    fn get_signer_weights(env: Env, keys: Vec<PubKey>) -> Vec<u64>;
-    fn get_signer_weights_at(env: Env, keys: Vec<PubKey>, reference_block: u32) -> Vec<u64>;
+    fn get_signer_weight(env: Env, key: CompressedSecpPubKey) -> u64;
+    fn get_signer_weight_at(env: Env, key: CompressedSecpPubKey, reference_block: u32) -> u64;
+    fn get_signer_weights(env: Env, keys: Vec<CompressedSecpPubKey>) -> Vec<u64>;
+    fn get_signer_weights_at(
+        env: Env,
+        keys: Vec<CompressedSecpPubKey>,
+        reference_block: u32,
+    ) -> Vec<u64>;
     fn get_total_weight_at(env: Env, reference_block: u32) -> u64;
     fn required_weight_at(env: Env, reference_block: u32) -> u64;
     fn list_signers(env: Env) -> Vec<SignerInfo>;
