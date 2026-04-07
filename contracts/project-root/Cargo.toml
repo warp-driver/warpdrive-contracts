@@ -16,3 +16,5 @@ warpdrive-shared = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+warpdrive-security = { workspace = true }
+warpdrive-verification = { workspace = true }

@@ -1,6 +1,6 @@
 // This includes all standard methods for all WarpDrive contracts
 
-use soroban_sdk::{Address, BytesN, Env, String, contractclient, contractevent};
+use soroban_sdk::{Address, BytesN, Env, String, contractevent};
 
 // ── Events ───────────────────────────────────────────────────────────
 
@@ -21,16 +21,30 @@ pub struct AdminProposed {
     pub new_admin: Address,
 }
 
+impl AdminProposed {
+    pub fn new(old_admin: Address, new_admin: Address) -> Self {
+        Self {
+            old_admin,
+            new_admin,
+        }
+    }
+}
+
 #[contractevent]
 pub struct AdminAccepted {
     pub new_admin: Address,
+}
+
+impl AdminAccepted {
+    pub fn new(new_admin: Address) -> Self {
+        Self { new_admin }
+    }
 }
 
 // ── Interface trait (compile-time contract conformance) ──────────────
 
 /// These are standard to all warpdrive contracts, upgrade, admin, version queries.
 /// Place them as one trait shared by all contracts to make it clearer which is custom logic and guarantee compatibility on these.
-#[contractclient(name = "WarpDriveClient")]
 pub trait WarpDriveInterface {
     // State-changing methods
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String);
