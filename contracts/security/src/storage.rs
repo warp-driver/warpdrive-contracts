@@ -34,10 +34,12 @@ pub struct StoredCheckpoint {
 
 #[contracttype]
 pub enum DataKey {
+    // These are instance storage
     Admin,
     Version,
     Threshold,
     TotalWeight,
+    // These can grow quite large, all in persistent storage
     AllSigners,
     Signers(PubKey),
     // Vec-based history (one key per timeline)
@@ -173,13 +175,15 @@ pub fn list_signers(env: &Env) -> Vec<SignerInfo> {
 
 fn all_signers(env: &Env) -> Vec<PubKey> {
     env.storage()
-        .instance()
+        .persistent()
         .get(&DataKey::AllSigners)
         .unwrap_or_else(|| Vec::new(env))
 }
 
 fn set_all_signers(env: &Env, signers: &Vec<PubKey>) {
-    env.storage().instance().set(&DataKey::AllSigners, signers)
+    env.storage()
+        .persistent()
+        .set(&DataKey::AllSigners, signers)
 }
 
 fn insert_all_signers(env: &Env, key: PubKey) {
@@ -221,7 +225,7 @@ fn remove_all_signers(env: &Env, key: PubKey) {
 fn load_history(env: &Env, key: &DataKey) -> StdVec<Entry<u64>> {
     let stored: Vec<StoredCheckpoint> = env
         .storage()
-        .instance()
+        .persistent()
         .get(key)
         .unwrap_or_else(|| Vec::new(env));
     let mut result = StdVec::with_capacity(stored.len() as usize);
@@ -243,7 +247,7 @@ fn save_history(env: &Env, key: &DataKey, entries: StdVec<Entry<u64>>) {
             value: e.value,
         });
     }
-    env.storage().instance().set(key, &stored);
+    env.storage().persistent().set(key, &stored);
 }
 
 pub struct SignerWeightHistory<'a> {
