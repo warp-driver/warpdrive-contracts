@@ -38,10 +38,8 @@ pub enum DataKey {
     Admin,
     Version,
     Threshold,
-    TotalWeight,
     // These can grow quite large, all in persistent storage
     AllSigners,
-    Signers(PubKey),
     // Vec-based history (one key per timeline)
     SignerWeightHist(PubKey),
     TotalWeightHist,
@@ -76,14 +74,7 @@ pub fn set_threshold(env: &Env, threshold: &Threshold) {
 // ── Total weight (current snapshot) ─────────────────────────────────
 
 pub fn get_total_weight(env: &Env) -> u64 {
-    env.storage()
-        .instance()
-        .get(&DataKey::TotalWeight)
-        .unwrap_or(0u64)
-}
-
-fn set_total_weight(env: &Env, weight: u64) {
-    env.storage().instance().set(&DataKey::TotalWeight, &weight);
+    vec_history::latest(&TotalWeightHistory::new(env))
 }
 
 // ── Signer management ───────────────────────────────────────────────
@@ -102,12 +93,6 @@ pub fn add_signer(env: &Env, key: PubKey, weight: u64) {
         .checked_add(weight)
         .expect("total weight would overflow u64");
 
-    env.storage()
-        .instance()
-        .set(&DataKey::Signers(key.clone()), &weight);
-    set_total_weight(env, total);
-
-    // Push checkpoints for historical lookups
     vec_history::push(&SignerWeightHistory::new(env, key), weight);
     vec_history::push(&TotalWeightHistory::new(env), total);
 }
@@ -116,20 +101,16 @@ pub fn remove_signer(env: &Env, key: PubKey) {
     if let Some(old_weight) = get_signer_weight(env, key.clone()) {
         let total = get_total_weight(env);
         let new_total = total - old_weight;
-        set_total_weight(env, new_total);
         remove_all_signers(env, key.clone());
-        env.storage()
-            .instance()
-            .remove(&DataKey::Signers(key.clone()));
 
-        // Push checkpoints: signer weight drops to 0, total updated
         vec_history::push(&SignerWeightHistory::new(env, key), 0);
         vec_history::push(&TotalWeightHistory::new(env), new_total);
     }
 }
 
 pub fn get_signer_weight(env: &Env, key: PubKey) -> Option<u64> {
-    env.storage().instance().get(&DataKey::Signers(key))
+    let weight = vec_history::latest(&SignerWeightHistory::new(env, key));
+    if weight == 0 { None } else { Some(weight) }
 }
 
 // ── Historical lookups ──────────────────────────────────────────────
