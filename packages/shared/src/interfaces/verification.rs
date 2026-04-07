@@ -1,4 +1,3 @@
-use enum_repr::EnumRepr;
 use soroban_sdk::{
     Address, Bytes, BytesN, Env, String, Vec, contractclient, contracterror, contractevent,
 };
@@ -7,17 +6,18 @@ use super::PubKey;
 
 // ── Error ────────────────────────────────────────────────────────────
 
+// Namespacing: Verification errors are from 300-399
+
 #[contracterror]
-#[EnumRepr(type = "u32")]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum VerifyError {
-    InvalidSignature = 1,
-    SignerNotRegistered = 2,
-    InsufficientWeight = 3,
-    EmptySignatures = 4,
-    LengthMismatch = 5,
-    SignersNotOrdered = 6,
-    ZeroRequiredWeight = 7,
+    InvalidSignature = 301,
+    SignerNotRegistered = 302,
+    InsufficientWeight = 303,
+    EmptySignatures = 304,
+    LengthMismatch = 305,
+    SignersNotOrdered = 306,
+    ZeroRequiredWeight = 307,
 }
 
 // ── Events ───────────────────────────────────────────────────────────

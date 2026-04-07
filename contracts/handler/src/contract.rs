@@ -37,7 +37,7 @@ fn map_verify_result(
         Ok(Ok(())) => Ok(()),
         Ok(Err(_conversion)) => Err(HandlerError::UnknownVerificationError),
         Err(Ok(e)) => Err(HandlerError::from(e)),
-        Err(Err(_invoke_err)) => Err(HandlerError::UnknownVerificationError),
+        Err(Err(_invoke_err)) => Err(HandlerError::OtherInvocationError),
     }
 }
 

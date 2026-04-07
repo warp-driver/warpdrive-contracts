@@ -1,4 +1,3 @@
-use enum_repr::EnumRepr;
 use soroban_sdk::{
     Address, BytesN, Env, String, Vec, contractclient, contracterror, contractevent, contracttype,
 };
@@ -7,14 +6,15 @@ use super::PubKey;
 
 // ── Error ────────────────────────────────────────────────────────────
 
+// Namespacing: Security errors are from 200-299
+
 #[contracterror]
-#[EnumRepr(type = "u32")]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum SecurityError {
-    ZeroDenominator = 1,
-    NumeratorExceedsDenominator = 2,
-    ZeroNumerator = 3,
-    ZeroWeight = 4,
+    ZeroDenominator = 201,
+    NumeratorExceedsDenominator = 202,
+    ZeroNumerator = 203,
+    ZeroWeight = 204,
 }
 
 // ── Types ────────────────────────────────────────────────────────────

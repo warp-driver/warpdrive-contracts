@@ -12,9 +12,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { workspace = true }
-warpdrive-shared = { path = "../../packages/shared" }
-enum-repr = "0.2.6"
+warpdrive-shared = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-warpdrive-shared = { path = "../../packages/shared", features = ["testutils"] }
+warpdrive-shared = { workspace = true, features = ["testutils"] }

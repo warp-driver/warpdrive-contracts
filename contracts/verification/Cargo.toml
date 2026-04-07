@@ -12,9 +12,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { workspace = true }
-warpdrive-shared = { path = "../../packages/shared" }
+warpdrive-shared = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-warpdrive-security = { path = "../security" }
-warpdrive-shared = { path = "../../packages/shared", features = ["testutils"] }
+warpdrive-security = { workspace = true }
+warpdrive-shared = { workspace = true, features = ["testutils"] }

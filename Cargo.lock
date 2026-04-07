@@ -1929,7 +1929,6 @@ dependencies = [
 name = "warpdrive-security"
 version = "0.1.0"
 dependencies = [
- "enum-repr",
  "soroban-sdk",
  "warpdrive-shared",
 ]
@@ -1938,7 +1937,6 @@ dependencies = [
 name = "warpdrive-shared"
 version = "0.1.0"
 dependencies = [
- "enum-repr",
  "k256",
  "sha3",
  "soroban-sdk",

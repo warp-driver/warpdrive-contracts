@@ -1,4 +1,3 @@
-use enum_repr::EnumRepr;
 use soroban_sdk::{
     Address, Bytes, BytesN, Env, String, Vec, contractclient, contracterror, contractevent,
     contracttype,
@@ -10,25 +9,28 @@ use super::verification::VerifyError;
 
 // ── Error ────────────────────────────────────────────────────────────
 
+// Namespacing: Handler errors are from 500-599
+
 #[contracterror]
-#[EnumRepr(type = "u32")]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum HandlerError {
     // Errors from the handler itself
-    EventAlreadySeen = 1,
-    InvalidReferenceBlock = 2,
-    InvalidEnvelope = 3,
+    EventAlreadySeen = 501,
+    InvalidReferenceBlock = 502,
+    InvalidEnvelope = 503,
+    // These are unknown errors when calling the verification contract
+    UnknownVerificationError = 504,
+    OtherInvocationError = 505,
 
     // Some numbers intentionally skipped...
-    UnknownVerificationError = 20,
-    // Mapped from VerifyError
-    InvalidSignature = 21,
-    SignerNotRegistered = 22,
-    InsufficientWeight = 23,
-    EmptySignatures = 24,
-    LengthMismatch = 25,
-    SignersNotOrdered = 26,
-    ZeroRequiredWeight = 27,
+    // Mapped from VerifyError (use same enum values from their space
+    InvalidSignature = 301,
+    SignerNotRegistered = 302,
+    InsufficientWeight = 303,
+    EmptySignatures = 304,
+    LengthMismatch = 305,
+    SignersNotOrdered = 306,
+    ZeroRequiredWeight = 307,
 }
 
 impl From<VerifyError> for HandlerError {
