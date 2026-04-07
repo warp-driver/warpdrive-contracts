@@ -11,6 +11,7 @@ use crate::envelope::Envelope as EthEnvelope;
 use crate::storage;
 
 /// Maximum age (in ledgers) allowed for a reference block.
+/// Note: 200 blocks is around 20 minutes with 5-6 second blocks
 const MAX_REFERENCE_BLOCK_AGE: u32 = 200;
 
 /// Validates that `reference_block` is strictly in the past and within the allowed age window.

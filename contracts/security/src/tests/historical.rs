@@ -6,7 +6,7 @@ use warpdrive_shared::testutils::{compressed_pubkey, make_signing_key};
 
 type PubKey = soroban_sdk::BytesN<33>;
 
-// ── T-5: Direct historical query tests ──────────────────────────────
+// Direct historical query tests
 
 #[test]
 fn test_weight_at_before_any_checkpoint() {
@@ -89,8 +89,7 @@ fn test_weight_at_after_removal() {
     assert_eq!(client.get_total_weight_at(&200), 0);
 }
 
-// ── T-5: Batch weight queries at reference block ────────────────────
-
+/// Batch weight queries at reference block
 #[test]
 fn test_batch_weights_at() {
     let env = Env::default();
@@ -125,8 +124,7 @@ fn test_batch_weights_at() {
     assert_eq!(weights.get(1).unwrap(), 70);
 }
 
-// ── T-6: get_signer_weights (non-historical batch) ──────────────────
-
+/// get_signer_weights (non-historical batch)
 #[test]
 fn test_batch_weights_current() {
     let env = Env::default();

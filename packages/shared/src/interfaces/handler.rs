@@ -28,6 +28,7 @@ pub enum HandlerError {
     EmptySignatures = 24,
     LengthMismatch = 25,
     SignersNotOrdered = 26,
+    ZeroRequiredWeight = 27,
 }
 
 impl From<VerifyError> for HandlerError {
@@ -39,6 +40,7 @@ impl From<VerifyError> for HandlerError {
             VerifyError::EmptySignatures => HandlerError::EmptySignatures,
             VerifyError::LengthMismatch => HandlerError::LengthMismatch,
             VerifyError::SignersNotOrdered => HandlerError::SignersNotOrdered,
+            VerifyError::ZeroRequiredWeight => HandlerError::ZeroRequiredWeight,
         }
     }
 }

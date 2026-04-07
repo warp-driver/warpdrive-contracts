@@ -119,6 +119,10 @@ impl VerificationInterface for Verification {
         let weights = security.get_signer_weights_at(&signer_pubkeys, &reference_block);
         let required = security.required_weight_at(&reference_block);
 
+        if required == 0 {
+            return Err(VerifyError::ZeroRequiredWeight);
+        }
+
         let mut total_weight: u64 = 0;
         let mut prev_pubkey: Option<PubKey> = None;
 

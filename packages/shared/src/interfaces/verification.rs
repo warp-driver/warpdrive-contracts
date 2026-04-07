@@ -17,6 +17,7 @@ pub enum VerifyError {
     EmptySignatures = 4,
     LengthMismatch = 5,
     SignersNotOrdered = 6,
+    ZeroRequiredWeight = 7,
 }
 
 // ── Events ───────────────────────────────────────────────────────────

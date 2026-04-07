@@ -20,19 +20,23 @@ impl Security {
         admin: Address,
         threshold_numerator: u64,
         threshold_denominator: u64,
-    ) {
-        assert!(threshold_denominator > 0, "denominator must be > 0");
-        assert!(threshold_numerator > 0, "numerator must be > 0");
-        assert!(
-            threshold_numerator <= threshold_denominator,
-            "numerator must be <= denominator"
-        );
+    ) -> Result<(), SecurityError> {
+        if threshold_denominator == 0 {
+            return Err(SecurityError::ZeroDenominator);
+        }
+        if threshold_numerator == 0 {
+            return Err(SecurityError::ZeroNumerator);
+        }
+        if threshold_numerator > threshold_denominator {
+            return Err(SecurityError::NumeratorExceedsDenominator);
+        }
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_threshold(
             &env,
             &Threshold::new(threshold_numerator, threshold_denominator),
         );
+        Ok(())
     }
 }
 
