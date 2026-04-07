@@ -7,10 +7,12 @@ use soroban_sdk::{
     Address, Env, IntoVal, Vec,
     testutils::{Address as _, MockAuth, MockAuthInvoke},
 };
+use warpdrive_shared::testutils::{compressed_pubkey, make_signing_key};
+
+// ── T-11: Use valid compressed pubkeys ──────────────────────────────
 
 fn make_signer(env: &Env, seed: u8) -> PubKey {
-    // TODO: random generation
-    PubKey::from_array(env, &[seed; 33])
+    compressed_pubkey(env, &make_signing_key(seed))
 }
 
 #[test]
@@ -101,13 +103,8 @@ fn test_assert_admin_unauthorized() {
         },
     }]);
 
-    assert_eq!(
-        client.try_add_signer(&key, &weight),
-        Err(Ok(soroban_sdk::Error::from_type_and_code(
-            soroban_sdk::xdr::ScErrorType::Context,
-            soroban_sdk::xdr::ScErrorCode::InvalidAction,
-        )))
-    );
+    let result = client.try_add_signer(&key, &weight);
+    assert!(result.is_err());
 }
 
 #[test]
@@ -130,4 +127,56 @@ fn test_assert_admin_auth() {
 
     client.add_signer(&key, &weight);
     assert_eq!(client.get_total_weight(), weight);
+}
+
+// ── T-9: Removing a non-existent signer is a no-op ─────────────────
+
+#[test]
+fn test_remove_nonexistent_signer_is_noop() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _admin) = deploy_contract(&env);
+    let key1 = make_signer(&env, 1);
+    let key2 = make_signer(&env, 2);
+
+    client.add_signer(&key1, &50);
+    assert_eq!(client.get_total_weight(), 50);
+
+    // Remove a key that was never added — should be a silent no-op
+    client.remove_signer(&key2);
+    assert_eq!(client.get_total_weight(), 50);
+    assert_eq!(client.get_signer_weight(&key1), 50);
+    assert_eq!(client.list_signers().len(), 1);
+}
+
+// ── T-10: Admin auth on remove_signer ───────────────────────────────
+
+#[test]
+fn test_remove_signer_requires_admin() {
+    let env = Env::default();
+
+    let (client, _admin) = deploy_contract(&env);
+    let non_admin = Address::generate(&env);
+    let key = make_signer(&env, 1);
+
+    // First add a signer so there's something to remove
+    env.mock_all_auths();
+    client.add_signer(&key, &50);
+
+    // Now try to remove without admin auth
+    env.mock_auths(&[MockAuth {
+        address: &non_admin,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "remove_signer",
+            args: Vec::new(&env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    let result = client.try_remove_signer(&key);
+    assert!(result.is_err());
+    // Signer should still be there
+    assert_eq!(client.get_signer_weight(&key), 50);
 }

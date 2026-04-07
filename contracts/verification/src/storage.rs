@@ -4,6 +4,7 @@ use soroban_sdk::{Address, Env, String, contracttype};
 pub enum DataKey {
     Admin,
     Version,
+    SecurityContract,
 }
 
 pub fn get_admin(env: &Env) -> Address {
@@ -20,4 +21,17 @@ pub fn get_version(env: &Env) -> String {
 
 pub fn set_version(env: &Env, version: &String) {
     env.storage().instance().set(&DataKey::Version, version);
+}
+
+pub fn get_security_contract(env: &Env) -> Address {
+    env.storage()
+        .instance()
+        .get(&DataKey::SecurityContract)
+        .unwrap()
+}
+
+pub fn set_security_contract(env: &Env, address: &Address) {
+    env.storage()
+        .instance()
+        .set(&DataKey::SecurityContract, address);
 }

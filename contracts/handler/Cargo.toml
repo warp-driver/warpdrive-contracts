@@ -1,5 +1,5 @@
 [package]
-name = "warpdrive-security"
+name = "warpdrive-handler"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,9 +11,15 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-soroban-sdk = { workspace = true }
+soroban-sdk = { workspace = true, features = ["alloc"] }
+alloy-sol-types = { workspace = true }
+alloy-primitives = { workspace = true }
 warpdrive-shared = { workspace = true }
+enum-repr = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+warpdrive-security = { workspace = true }
+warpdrive-verification = { workspace = true }
 warpdrive-shared = { workspace = true, features = ["testutils"] }
+hex-literal = { workspace = true }
