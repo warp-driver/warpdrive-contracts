@@ -20,7 +20,6 @@ warpdrive-security = { path = "contracts/security" }
 warpdrive-verification = { path = "contracts/verification" }
 alloy-sol-types = { version = "1", default-features = false }
 alloy-primitives = { version = "1", default-features = false }
-enum-repr = "0.2.6"
 hex-literal = "0.4.1"
 
 [profile.release]

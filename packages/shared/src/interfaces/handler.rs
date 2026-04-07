@@ -1,11 +1,10 @@
 use soroban_sdk::{
-    Address, Bytes, BytesN, Env, String, Vec, contractclient, contracterror, contractevent,
-    contracttype,
+    Address, Bytes, BytesN, Env, Vec, contractclient, contracterror, contractevent, contracttype,
 };
 
-use crate::interfaces::PubKey;
-
+use super::PubKey;
 use super::verification::VerifyError;
+use super::warpdrive::WarpDriveInterface;
 
 // ── Error ────────────────────────────────────────────────────────────
 
@@ -77,29 +76,11 @@ impl Verified {
     }
 }
 
-#[contractevent]
-pub struct HandlerUpgraded {
-    pub version: String,
-}
-
-impl HandlerUpgraded {
-    pub fn new(version: String) -> Self {
-        Self { version }
-    }
-}
-
 // ── Interface trait (compile-time contract conformance) ──────────────
 
 #[contractclient(name = "HandlerClient")]
-pub trait HandlerInterface {
-    fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String);
-    fn admin(env: Env) -> Address;
-    fn pending_admin(env: Env) -> Option<Address>;
-    fn propose_admin(env: Env, new_admin: Address);
-    fn accept_admin(env: Env);
-    fn version(env: Env) -> String;
-    fn verification_contract(env: Env) -> Address;
-    fn payload(env: Env, event_id: BytesN<20>) -> Option<Bytes>;
+pub trait HandlerInterface: WarpDriveInterface {
+    // State Changing Operations (if verification succeeds)
     fn verify_eth(
         env: Env,
         envelope_bytes: Bytes,
@@ -110,4 +91,8 @@ pub trait HandlerInterface {
         envelope_bytes: Bytes,
         sig_data: SignatureData,
     ) -> Result<(), HandlerError>;
+
+    // Queries
+    fn verification_contract(env: Env) -> Address;
+    fn payload(env: Env, event_id: BytesN<20>) -> Option<Bytes>;
 }

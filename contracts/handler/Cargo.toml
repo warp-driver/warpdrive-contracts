@@ -15,7 +15,6 @@ soroban-sdk = { workspace = true, features = ["alloc"] }
 alloy-sol-types = { workspace = true }
 alloy-primitives = { workspace = true }
 warpdrive-shared = { workspace = true }
-enum-repr = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

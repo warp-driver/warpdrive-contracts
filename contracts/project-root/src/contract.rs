@@ -1,6 +1,9 @@
 use soroban_sdk::{Address, BytesN, Env, String, contract, contractimpl};
 
-use warpdrive_shared::interfaces::project_root::{ProjectRootInterface, ProjectRootUpgraded};
+use warpdrive_shared::interfaces::{
+    project_root::ProjectRootInterface,
+    warpdrive::{ContractUpgraded, WarpDriveInterface},
+};
 
 use crate::storage;
 
@@ -16,14 +19,14 @@ impl ProjectRoot {
 }
 
 #[contractimpl]
-impl ProjectRootInterface for ProjectRoot {
+impl WarpDriveInterface for ProjectRoot {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
-        ProjectRootUpgraded::new(new_version).publish(&env);
+        ContractUpgraded::new(new_version).publish(&env);
     }
 
     fn admin(env: Env) -> Address {
@@ -47,3 +50,6 @@ impl ProjectRootInterface for ProjectRoot {
         storage::get_version(&env)
     }
 }
+
+#[contractimpl]
+impl ProjectRootInterface for ProjectRoot {}
