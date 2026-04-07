@@ -1,8 +1,13 @@
+extern crate alloc;
+
+use alloc::vec::Vec as StdVec;
 use soroban_sdk::{Address, Env, String, Vec, contracttype};
-use warpdrive_shared::checkpoint::{self, Checkpoint, CheckpointStore};
+use warpdrive_shared::vec_history::{self, Entry, VecHistoryStore};
 
 pub use warpdrive_shared::interfaces::PubKey;
 pub use warpdrive_shared::interfaces::security::SignerInfo;
+
+const HISTORY_CUTOFF: u32 = 200;
 
 #[contracttype]
 #[derive(Clone)]
@@ -29,17 +34,15 @@ pub struct StoredCheckpoint {
 
 #[contracttype]
 pub enum DataKey {
+    // These are instance storage
     Admin,
     Version,
     Threshold,
-    TotalWeight,
+    // These can grow quite large, all in persistent storage
     AllSigners,
-    Signers(PubKey),
-    // Checkpoint keys
-    SignerWeightCount(PubKey),
-    SignerWeightAt(PubKey, u32),
-    TotalWeightCount,
-    TotalWeightAt(u32),
+    // Vec-based history (one key per timeline)
+    SignerWeightHist(PubKey),
+    TotalWeightHist,
 }
 
 // ── Admin / Version / Threshold ─────────────────────────────────────
@@ -71,14 +74,7 @@ pub fn set_threshold(env: &Env, threshold: &Threshold) {
 // ── Total weight (current snapshot) ─────────────────────────────────
 
 pub fn get_total_weight(env: &Env) -> u64 {
-    env.storage()
-        .instance()
-        .get(&DataKey::TotalWeight)
-        .unwrap_or(0u64)
-}
-
-fn set_total_weight(env: &Env, weight: u64) {
-    env.storage().instance().set(&DataKey::TotalWeight, &weight);
+    vec_history::latest(&TotalWeightHistory::new(env))
 }
 
 // ── Signer management ───────────────────────────────────────────────
@@ -97,40 +93,30 @@ pub fn add_signer(env: &Env, key: PubKey, weight: u64) {
         .checked_add(weight)
         .expect("total weight would overflow u64");
 
-    env.storage()
-        .instance()
-        .set(&DataKey::Signers(key.clone()), &weight);
-    set_total_weight(env, total);
-
-    // Push checkpoints for historical lookups
-    checkpoint::push(&SignerWeightHistory::new(env, key), weight);
-    checkpoint::push(&TotalWeightHistory::new(env), total);
+    vec_history::push(&SignerWeightHistory::new(env, key), weight);
+    vec_history::push(&TotalWeightHistory::new(env), total);
 }
 
 pub fn remove_signer(env: &Env, key: PubKey) {
     if let Some(old_weight) = get_signer_weight(env, key.clone()) {
         let total = get_total_weight(env);
         let new_total = total - old_weight;
-        set_total_weight(env, new_total);
         remove_all_signers(env, key.clone());
-        env.storage()
-            .instance()
-            .remove(&DataKey::Signers(key.clone()));
 
-        // Push checkpoints: signer weight drops to 0, total updated
-        checkpoint::push(&SignerWeightHistory::new(env, key), 0);
-        checkpoint::push(&TotalWeightHistory::new(env), new_total);
+        vec_history::push(&SignerWeightHistory::new(env, key), 0);
+        vec_history::push(&TotalWeightHistory::new(env), new_total);
     }
 }
 
 pub fn get_signer_weight(env: &Env, key: PubKey) -> Option<u64> {
-    env.storage().instance().get(&DataKey::Signers(key))
+    let weight = vec_history::latest(&SignerWeightHistory::new(env, key));
+    if weight == 0 { None } else { Some(weight) }
 }
 
 // ── Historical lookups ──────────────────────────────────────────────
 
 pub fn get_signer_weight_at(env: &Env, key: PubKey, reference_block: u32) -> u64 {
-    checkpoint::lookup_at(&SignerWeightHistory::new(env, key), reference_block)
+    vec_history::lookup_at(&SignerWeightHistory::new(env, key), reference_block)
 }
 
 pub fn get_signer_weights(env: &Env, keys: &Vec<PubKey>) -> Vec<u64> {
@@ -152,7 +138,7 @@ pub fn get_signer_weights_at(env: &Env, keys: &Vec<PubKey>, reference_block: u32
 }
 
 pub fn get_total_weight_at(env: &Env, reference_block: u32) -> u64 {
-    checkpoint::lookup_at(&TotalWeightHistory::new(env), reference_block)
+    vec_history::lookup_at(&TotalWeightHistory::new(env), reference_block)
 }
 
 // ── Signer enumeration (for UI) ─────────────────────────────────────
@@ -170,13 +156,15 @@ pub fn list_signers(env: &Env) -> Vec<SignerInfo> {
 
 fn all_signers(env: &Env) -> Vec<PubKey> {
     env.storage()
-        .instance()
+        .persistent()
         .get(&DataKey::AllSigners)
         .unwrap_or_else(|| Vec::new(env))
 }
 
 fn set_all_signers(env: &Env, signers: &Vec<PubKey>) {
-    env.storage().instance().set(&DataKey::AllSigners, signers)
+    env.storage()
+        .persistent()
+        .set(&DataKey::AllSigners, signers)
 }
 
 fn insert_all_signers(env: &Env, key: PubKey) {
@@ -213,7 +201,35 @@ fn remove_all_signers(env: &Env, key: PubKey) {
     }
 }
 
-// ── CheckpointStore implementations ─────────────────────────────────
+// ── VecHistoryStore implementations ─────────────────────────────────
+
+fn load_history(env: &Env, key: &DataKey) -> StdVec<Entry<u64>> {
+    let stored: Vec<StoredCheckpoint> = env
+        .storage()
+        .persistent()
+        .get(key)
+        .unwrap_or_else(|| Vec::new(env));
+    let mut result = StdVec::with_capacity(stored.len() as usize);
+    for i in 0..stored.len() {
+        let sc = stored.get(i).unwrap();
+        result.push(Entry {
+            ledger: sc.ledger,
+            value: sc.value,
+        });
+    }
+    result
+}
+
+fn save_history(env: &Env, key: &DataKey, entries: StdVec<Entry<u64>>) {
+    let mut stored = Vec::new(env);
+    for e in entries {
+        stored.push_back(StoredCheckpoint {
+            ledger: e.ledger,
+            value: e.value,
+        });
+    }
+    env.storage().persistent().set(key, &stored);
+}
 
 pub struct SignerWeightHistory<'a> {
     env: &'a Env,
@@ -226,46 +242,23 @@ impl<'a> SignerWeightHistory<'a> {
     }
 }
 
-impl CheckpointStore for SignerWeightHistory<'_> {
+impl VecHistoryStore for SignerWeightHistory<'_> {
     type Value = u64;
 
-    fn count(&self) -> u32 {
-        self.env
-            .storage()
-            .instance()
-            .get(&DataKey::SignerWeightCount(self.key.clone()))
-            .unwrap_or(0u32)
+    fn cutoff(&self) -> u32 {
+        HISTORY_CUTOFF
     }
 
-    fn set_count(&self, count: u32) {
-        self.env
-            .storage()
-            .instance()
-            .set(&DataKey::SignerWeightCount(self.key.clone()), &count);
+    fn load(&self) -> StdVec<Entry<u64>> {
+        load_history(self.env, &DataKey::SignerWeightHist(self.key.clone()))
     }
 
-    fn get(&self, index: u32) -> Checkpoint<u64> {
-        let sc: StoredCheckpoint = self
-            .env
-            .storage()
-            .instance()
-            .get(&DataKey::SignerWeightAt(self.key.clone(), index))
-            .unwrap();
-        Checkpoint {
-            ledger: sc.ledger,
-            value: sc.value,
-        }
-    }
-
-    fn set(&self, index: u32, cp: Checkpoint<u64>) {
-        let sc = StoredCheckpoint {
-            ledger: cp.ledger,
-            value: cp.value,
-        };
-        self.env
-            .storage()
-            .instance()
-            .set(&DataKey::SignerWeightAt(self.key.clone(), index), &sc);
+    fn save(&self, entries: StdVec<Entry<u64>>) {
+        save_history(
+            self.env,
+            &DataKey::SignerWeightHist(self.key.clone()),
+            entries,
+        );
     }
 
     fn current_ledger(&self) -> u32 {
@@ -283,46 +276,19 @@ impl<'a> TotalWeightHistory<'a> {
     }
 }
 
-impl CheckpointStore for TotalWeightHistory<'_> {
+impl VecHistoryStore for TotalWeightHistory<'_> {
     type Value = u64;
 
-    fn count(&self) -> u32 {
-        self.env
-            .storage()
-            .instance()
-            .get(&DataKey::TotalWeightCount)
-            .unwrap_or(0u32)
+    fn cutoff(&self) -> u32 {
+        HISTORY_CUTOFF
     }
 
-    fn set_count(&self, count: u32) {
-        self.env
-            .storage()
-            .instance()
-            .set(&DataKey::TotalWeightCount, &count);
+    fn load(&self) -> StdVec<Entry<u64>> {
+        load_history(self.env, &DataKey::TotalWeightHist)
     }
 
-    fn get(&self, index: u32) -> Checkpoint<u64> {
-        let sc: StoredCheckpoint = self
-            .env
-            .storage()
-            .instance()
-            .get(&DataKey::TotalWeightAt(index))
-            .unwrap();
-        Checkpoint {
-            ledger: sc.ledger,
-            value: sc.value,
-        }
-    }
-
-    fn set(&self, index: u32, cp: Checkpoint<u64>) {
-        let sc = StoredCheckpoint {
-            ledger: cp.ledger,
-            value: cp.value,
-        };
-        self.env
-            .storage()
-            .instance()
-            .set(&DataKey::TotalWeightAt(index), &sc);
+    fn save(&self, entries: StdVec<Entry<u64>>) {
+        save_history(self.env, &DataKey::TotalWeightHist, entries);
     }
 
     fn current_ledger(&self) -> u32 {
