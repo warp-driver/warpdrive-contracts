@@ -24,7 +24,6 @@ tasks:
     desc: Build, optimize, and deploy all contracts to testnet
     deps: [fund]
     cmds:
-      - task: :build-deploy
       - task: :optimize
       - mkdir -p {{.STATE_DIR}}
       - |

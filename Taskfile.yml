@@ -69,7 +69,7 @@ tasks:
 
   optimize:
     desc: Optimize WASM artifacts for deployment
-    deps: [build]
+    deps: [build-deploy]
     cmds:
       - for:
           var: CONTRACTS
