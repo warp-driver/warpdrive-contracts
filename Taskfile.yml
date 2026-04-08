@@ -17,8 +17,19 @@ tasks:
     cmds:
       - task: build
 
+  setup:
+    desc: Install stellar-cli and add WASM target
+    cmds:
+      - cargo install stellar-cli --locked
+      - rustup target add {{.WASM_TARGET}}
+
   build:
     desc: Build all contracts to WASM
+    cmds:
+      - cargo build --target {{.WASM_TARGET}} --release
+
+  build-deploy:
+    desc: Build contracts for deployment (uses stellar CLI for proper stripping)
     cmds:
       - stellar contract build
 
