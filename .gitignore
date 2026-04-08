@@ -5,3 +5,4 @@ target/
 .claude/
 .env
 test_snapshots/
+.testnet/
