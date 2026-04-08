@@ -1,12 +1,18 @@
-# Verification Contract
+# Secp256k1 Verification Contract
 
-The Verification contract performs EIP-191 secp256k1 signature verification for WarpDrive attestations. It is the cryptographic core of the verification pipeline -- it takes an envelope and a set of signatures, recovers the public key from each signature, verifies that each recovered key matches a registered signer in the Security contract, and checks that the cumulative weight of all valid signers meets the required threshold.
+The Secp256k1 Verification contract performs EIP-191 secp256k1 signature verification for cross-chain WarpDrive attestations. It is the cryptographic core of the verification pipeline for processes that bridge with Ethereum and other EVM chains -- it takes an envelope and a set of signatures, recovers the public key from each signature using `secp256k1_recover`, verifies that each recovered key matches a registered signer in the Secp256k1 Security contract, and checks that the cumulative weight of all valid signers meets the required threshold.
 
 The contract is stateless beyond its configuration (admin address and linked Security contract). It does not store any attestation data; it purely validates and returns success or failure. This makes it reusable across different Handler implementations and composable with any contract that needs to verify Vectr attestations.
 
+## When to use this contract
+
+Use the Secp256k1 Verification contract when your WarpDrive process involves cross-chain communication with Ethereum or other EVM-compatible chains. Vectrs sign attestations with secp256k1 keys using Ethereum-format signatures (r||s||v with v=27/28), and this contract recovers the signer using Soroban's `secp256k1_recover` precompile. The EIP-191 message format (`"\x19Ethereum Signed Message:\n32" || keccak256(envelope)`) ensures signatures are compatible with standard EVM tooling.
+
+For Soroban-native processes that don't need EVM compatibility, see the [Ed25519 Verification contract](../ed25519-verification/README.md).
+
 ## Contract Interactions
 
-**Security contract** -- The Verification contract calls the Security contract to look up signer weights and the required threshold. It uses historical weight queries (`get_signer_weights_at`, `required_weight_at`) when a `reference_block` is provided, ensuring verification uses the signer set that was active when the Vectrs signed.
+**Secp256k1 Security contract** -- Calls the Security contract to look up signer weights and the required threshold. Uses historical weight queries (`get_signer_weights_at`, `required_weight_at`) when a `reference_block` is provided, ensuring verification uses the signer set that was active when the Vectrs signed.
 
 **Handler contract** -- The Handler calls `verify` after decoding the envelope and extracting signatures. The Verification contract validates the signatures and returns success or a typed error. The Handler does not need to understand the cryptographic details.
 
@@ -23,7 +29,7 @@ The contract is stateless beyond its configuration (admin address and linked Sec
 
 ## Interface
 
-The full interface is defined in [`VerificationInterface`](https://github.com/warp-driver/warpdrive-contracts/blob/main/packages/shared/src/interfaces/verification.rs).
+The full interface is defined in [`Secp256k1VerificationInterface`](https://github.com/warp-driver/warpdrive-contracts/blob/main/packages/shared/src/interfaces/verification.rs).
 
 ### State-Changing Actions
 
@@ -46,16 +52,24 @@ The full interface is defined in [`VerificationInterface`](https://github.com/wa
 | `pending_admin() -> Option<Address>` | Return the pending admin, if a transfer is in progress. |
 | `version() -> String` | Return the current contract version. |
 
+### Types
+
+- **`CompressedSecpPubKey`** -- `BytesN<33>` -- compressed secp256k1 public key (33 bytes).
+- **`SecpSignature`** -- `BytesN<65>` -- ECDSA signature in r||s||v format (65 bytes, v=27/28).
+
 ### Errors
+
+All verification errors are returned as typed `VerifyError` variants. Invalid signatures are detected by comparing the recovered public key against the expected signer, so they produce a clean error rather than a panic.
 
 | Code | Name | Description |
 |------|------|-------------|
-| 1 | `InvalidSignature` | Signature recovery did not produce the expected public key |
-| 2 | `SignerNotRegistered` | Recovered signer has zero weight in the Security contract |
-| 3 | `InsufficientWeight` | Cumulative signer weight is below the required threshold |
-| 4 | `EmptySignatures` | No signatures were provided |
-| 5 | `LengthMismatch` | Signatures and signer_pubkeys arrays have different lengths |
-| 6 | `SignersNotOrdered` | Signer public keys are not in strict ascending order |
+| 301 | `InvalidSignature` | Signature recovery did not produce the expected public key |
+| 302 | `SignerNotRegistered` | Recovered signer has zero weight in the Security contract |
+| 303 | `InsufficientWeight` | Cumulative signer weight is below the required threshold |
+| 304 | `EmptySignatures` | No signatures were provided |
+| 305 | `LengthMismatch` | Signatures and signer_pubkeys arrays have different lengths |
+| 306 | `SignersNotOrdered` | Signer public keys are not in strict ascending order |
+| 307 | `ZeroRequiredWeight` | Required weight is zero (no signers registered or threshold misconfigured) |
 
 ## Events
 
@@ -63,12 +77,4 @@ The Verification contract is stateless beyond configuration. Only upgrades emit 
 
 | Event | Topic | Data Fields | Emitted By |
 |-------|-------|-------------|------------|
-| `VerificationUpgraded` | -- | `version: String` | `upgrade` |
-
-### VerificationUpgraded
-
-Emitted when the contract WASM is upgraded.
-
-| Field | Type | Topic | Description |
-|-------|------|-------|-------------|
-| `version` | `String` | no | New contract version |
+| `ContractUpgraded` | -- | `version: String` | `upgrade` |

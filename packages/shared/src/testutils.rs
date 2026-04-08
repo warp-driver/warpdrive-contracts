@@ -81,8 +81,17 @@ pub fn ed25519_pubkey(env: &Env, key: &Ed25519SigningKey) -> Ed25519PubKey {
     Ed25519PubKey::from_array(env, vk.as_bytes())
 }
 
-/// Sign a message with ed25519. Returns a 64-byte signature.
-pub fn ed25519_sign(key: &Ed25519SigningKey, message: &[u8]) -> [u8; 64] {
-    let sig = key.sign(message);
+/// Sign an envelope using SEP-0053 format with ed25519.
+/// Computes `SHA256("Stellar Signed Message:\n" || envelope)` then signs the hash.
+/// Returns a 64-byte ed25519 signature.
+pub fn ed25519_sign_envelope(key: &Ed25519SigningKey, envelope: &[u8]) -> [u8; 64] {
+    use sha2::{Digest, Sha256};
+
+    let mut payload = std::vec::Vec::new();
+    payload.extend_from_slice(b"Stellar Signed Message:\n");
+    payload.extend_from_slice(envelope);
+    let hash = Sha256::digest(&payload);
+
+    let sig = key.sign(&hash);
     sig.to_bytes()
 }

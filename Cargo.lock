@@ -1901,6 +1901,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "warpdrive-ed25519-verification"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "warpdrive-ed25519-security",
+ "warpdrive-shared",
+]
+
+[[package]]
 name = "warpdrive-handler"
 version = "0.1.0"
 dependencies = [
@@ -1946,6 +1955,7 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "k256",
+ "sha2",
  "sha3",
  "soroban-sdk",
 ]

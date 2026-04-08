@@ -8,6 +8,7 @@ vars:
     - secp256k1-security
     - secp256k1-verification
     - ed25519-security
+    - ed25519-verification
     - handler
 
 tasks:
