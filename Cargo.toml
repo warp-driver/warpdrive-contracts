@@ -5,6 +5,10 @@ members = [
     "packages/*",
     "tools/*",
 ]
+default-members = [
+    "contracts/*",
+    "packages/*",
+]
 
 [workspace.package]
 edition = "2024"

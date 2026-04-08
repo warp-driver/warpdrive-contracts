@@ -1,5 +1,8 @@
 version: "3"
 
+includes:
+  testnet: ./taskfiles/testnet.yml
+
 vars:
   WASM_TARGET: wasm32v1-none
   WASM_DIR: target/{{.WASM_TARGET}}/release
