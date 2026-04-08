@@ -20,7 +20,7 @@ tasks:
   build:
     desc: Build all contracts to WASM
     cmds:
-      - cargo build --target {{.WASM_TARGET}} --release
+      - stellar contract build
 
   test:
     desc: Run unit tests
