@@ -3,6 +3,7 @@
 pub mod admin;
 pub mod checkpoint;
 pub mod interfaces;
+pub mod ttl;
 pub mod vec_history;
 
 // Re-export for backwards compatibility
