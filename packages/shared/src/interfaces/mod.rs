@@ -7,7 +7,7 @@ pub mod verification;
 pub mod warpdrive;
 
 /// Compressed secp256k1 public key
-/// Can generate this with compressed_pubkey in testutils.rs
+/// Can generate this with secp256k1_pubkey in testutils.rs
 pub type CompressedSecpPubKey = BytesN<33>;
 
 /// Secp256k1 signature with recovery byte

@@ -4,7 +4,7 @@ use warpdrive_secp256k1_security::Secp256k1Security;
 use warpdrive_secp256k1_verification::Secp256k1Verification;
 
 mod contract_wasm {
-    use warpdrive_shared::interfaces::CompressedSecpPubKey;
+    use warpdrive_shared::interfaces::{CompressedSecpPubKey, Ed25519PubKey};
 
     soroban_sdk::contractimport!(
         file = "../../target/wasm32v1-none/release/warpdrive_project_root.wasm"

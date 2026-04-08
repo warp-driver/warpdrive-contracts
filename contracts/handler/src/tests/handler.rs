@@ -8,11 +8,12 @@ use alloy_sol_types::SolValue;
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
+use warpdrive_secp256k1_verification::Secp256k1Verification;
 use warpdrive_shared::interfaces::handler::XlmEnvelope;
 use warpdrive_shared::testutils::{
-    PubKey, SigningKey, compressed_pubkey, make_signing_key, sign_envelope,
+    CompressedSecpPubKey, SecpSigningKey, make_secp256k1_key, secp256k1_pubkey,
+    secp256k1_sign_envelope,
 };
-use warpdrive_secp256k1_verification::Secp256k1Verification;
 
 /// Reference block used by default in tests — signers are registered at this ledger.
 const TEST_REF_BLOCK: u32 = 10;
@@ -62,13 +63,19 @@ fn expected_payload(env: &Env, seed: u8) -> Bytes {
 /// Signers are registered at ledger TEST_REF_BLOCK, current ledger is TEST_CURRENT_LEDGER.
 fn setup_handler_with_signers(
     env: &Env,
-) -> (HandlerClient<'_>, SigningKey, PubKey, SigningKey, PubKey) {
+) -> (
+    HandlerClient<'_>,
+    SecpSigningKey,
+    CompressedSecpPubKey,
+    SecpSigningKey,
+    CompressedSecpPubKey,
+) {
     let admin = soroban_sdk::Address::generate(env);
 
-    let key1 = make_signing_key(1);
-    let key2 = make_signing_key(2);
-    let pk1 = compressed_pubkey(env, &key1);
-    let pk2 = compressed_pubkey(env, &key2);
+    let key1 = make_secp256k1_key(1);
+    let key2 = make_secp256k1_key(2);
+    let pk1 = secp256k1_pubkey(env, &key1);
+    let pk2 = secp256k1_pubkey(env, &key2);
 
     // Register signers at TEST_REF_BLOCK so checkpoints are recorded there
     env.ledger().set_sequence_number(TEST_REF_BLOCK);
@@ -92,17 +99,17 @@ fn setup_handler_with_signers(
 fn make_sig_data(
     env: &Env,
     envelope_raw: &[u8],
-    keys_and_pubs: &[(SigningKey, PubKey)],
+    keys_and_pubs: &[(SecpSigningKey, CompressedSecpPubKey)],
 ) -> SignatureData {
     let mut sorted: std::vec::Vec<_> = keys_and_pubs.to_vec();
     sorted.sort_by(|a, b| a.1.to_array().cmp(&b.1.to_array()));
 
-    let mut signers: Vec<PubKey> = Vec::new(env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(env);
     let mut signatures: Vec<BytesN<65>> = Vec::new(env);
 
     for (key, pubkey) in &sorted {
         signers.push_back(pubkey.clone());
-        let sig_bytes = sign_envelope(key, envelope_raw);
+        let sig_bytes = secp256k1_sign_envelope(key, envelope_raw);
         signatures.push_back(BytesN::from_array(env, &sig_bytes));
     }
 
@@ -209,7 +216,7 @@ fn test_verify_invalid_signature_fails() {
 
     let envelope = make_envelope_bytes_eth(&env, 1);
 
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk2);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
     signatures.push_back(BytesN::from_array(&env, &[0xAA; 65]));
@@ -334,7 +341,7 @@ fn test_verify_invalid_signature_fails_xlm() {
 
     let envelope = make_envelope_bytes_xlm(&env, 1);
 
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk2);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
     signatures.push_back(BytesN::from_array(&env, &[0xAA; 65]));
@@ -472,10 +479,10 @@ fn test_verify_length_mismatch_fails() {
 
     let envelope = make_envelope_bytes_eth(&env, 1);
     let raw = envelope.to_alloc_vec();
-    let sig_bytes = sign_envelope(&key1, &raw);
+    let sig_bytes = secp256k1_sign_envelope(&key1, &raw);
 
     // One signature, two pubkeys
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk1);
     signers.push_back(pk2);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
@@ -500,8 +507,8 @@ fn test_verify_signers_not_ordered_fails() {
 
     let envelope = make_envelope_bytes_eth(&env, 1);
     let raw = envelope.to_alloc_vec();
-    let sig1 = sign_envelope(&key1, &raw);
-    let sig2 = sign_envelope(&key2, &raw);
+    let sig1 = secp256k1_sign_envelope(&key1, &raw);
+    let sig2 = secp256k1_sign_envelope(&key2, &raw);
 
     // Determine correct order, then reverse it
     let (lo_pk, lo_sig, hi_pk, hi_sig) = if pk1.to_array() < pk2.to_array() {
@@ -511,7 +518,7 @@ fn test_verify_signers_not_ordered_fails() {
     };
 
     // Provide in descending order (wrong)
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(hi_pk);
     signers.push_back(lo_pk);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
@@ -535,14 +542,14 @@ fn test_verify_signer_not_registered_fails() {
     let env = Env::default();
     let (client, _key1, _pk1, _key2, _pk2) = setup_handler_with_signers(&env);
 
-    let key3 = make_signing_key(3);
-    let pk3 = compressed_pubkey(&env, &key3);
+    let key3 = make_secp256k1_key(3);
+    let pk3 = secp256k1_pubkey(&env, &key3);
 
     let envelope = make_envelope_bytes_eth(&env, 1);
     let raw = envelope.to_alloc_vec();
-    let sig3 = sign_envelope(&key3, &raw);
+    let sig3 = secp256k1_sign_envelope(&key3, &raw);
 
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk3);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
     signatures.push_back(BytesN::from_array(&env, &sig3));
@@ -584,9 +591,9 @@ fn test_verify_reference_block_in_future_fails() {
 
     let envelope = make_envelope_bytes_eth(&env, 1);
     let raw = envelope.to_alloc_vec();
-    let sig_bytes = sign_envelope(&key2, &raw);
+    let sig_bytes = secp256k1_sign_envelope(&key2, &raw);
 
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk2);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
     signatures.push_back(BytesN::from_array(&env, &sig_bytes));
@@ -614,9 +621,9 @@ fn test_verify_reference_block_too_old_fails() {
 
     let envelope = make_envelope_bytes_eth(&env, 1);
     let raw = envelope.to_alloc_vec();
-    let sig_bytes = sign_envelope(&key2, &raw);
+    let sig_bytes = secp256k1_sign_envelope(&key2, &raw);
 
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk2);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
     signatures.push_back(BytesN::from_array(&env, &sig_bytes));
@@ -641,10 +648,10 @@ fn test_verify_historical_passes_current_fails() {
     let env = Env::default();
     let admin = soroban_sdk::Address::generate(&env);
 
-    let key2 = make_signing_key(2);
-    let pk2 = compressed_pubkey(&env, &key2);
-    let key1 = make_signing_key(1);
-    let pk1 = compressed_pubkey(&env, &key1);
+    let key2 = make_secp256k1_key(2);
+    let pk2 = secp256k1_pubkey(&env, &key2);
+    let key1 = make_secp256k1_key(1);
+    let pk1 = secp256k1_pubkey(&env, &key1);
 
     // Ledger 10: key1=100, key2=200, total=300, required=165
     env.ledger().set_sequence_number(10);
@@ -666,9 +673,9 @@ fn test_verify_historical_passes_current_fails() {
 
     let envelope = make_envelope_bytes_eth(&env, 1);
     let raw = envelope.to_alloc_vec();
-    let sig_bytes = sign_envelope(&key2, &raw);
+    let sig_bytes = secp256k1_sign_envelope(&key2, &raw);
 
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk2);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
     signatures.push_back(BytesN::from_array(&env, &sig_bytes));
@@ -684,7 +691,7 @@ fn test_verify_historical_passes_current_fails() {
     // reference_block=50: key2 has 50, total 150, required 82 → fails
     let envelope2 = make_envelope_bytes_eth(&env, 2);
     let raw2 = envelope2.to_alloc_vec();
-    let sig_bytes2 = sign_envelope(&key2, &raw2);
+    let sig_bytes2 = secp256k1_sign_envelope(&key2, &raw2);
     let mut signatures2: Vec<BytesN<65>> = Vec::new(&env);
     signatures2.push_back(BytesN::from_array(&env, &sig_bytes2));
 
@@ -704,10 +711,10 @@ fn test_verify_historical_fails_current_passes() {
     let env = Env::default();
     let admin = soroban_sdk::Address::generate(&env);
 
-    let key1 = make_signing_key(1);
-    let pk1 = compressed_pubkey(&env, &key1);
-    let key2 = make_signing_key(2);
-    let pk2 = compressed_pubkey(&env, &key2);
+    let key1 = make_secp256k1_key(1);
+    let pk1 = secp256k1_pubkey(&env, &key1);
+    let key2 = make_secp256k1_key(2);
+    let pk2 = secp256k1_pubkey(&env, &key2);
 
     // Ledger 10: key1=50, key2=200, total=250, required=137, key1 alone=50 < 137
     env.ledger().set_sequence_number(10);
@@ -730,9 +737,9 @@ fn test_verify_historical_fails_current_passes() {
 
     let envelope = make_envelope_bytes_eth(&env, 1);
     let raw = envelope.to_alloc_vec();
-    let sig_bytes = sign_envelope(&key1, &raw);
+    let sig_bytes = secp256k1_sign_envelope(&key1, &raw);
 
-    let mut signers: Vec<PubKey> = Vec::new(&env);
+    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
     signers.push_back(pk1);
     let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
     signatures.push_back(BytesN::from_array(&env, &sig_bytes));
@@ -751,7 +758,7 @@ fn test_verify_historical_fails_current_passes() {
     // reference_block=50: key1 has 200, total 200, required 110 → passes
     let envelope2 = make_envelope_bytes_eth(&env, 2);
     let raw2 = envelope2.to_alloc_vec();
-    let sig_bytes2 = sign_envelope(&key1, &raw2);
+    let sig_bytes2 = secp256k1_sign_envelope(&key1, &raw2);
     let mut signatures2: Vec<BytesN<65>> = Vec::new(&env);
     signatures2.push_back(BytesN::from_array(&env, &sig_bytes2));
 
