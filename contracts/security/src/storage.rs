@@ -2,6 +2,7 @@ extern crate alloc;
 
 use alloc::vec::Vec as StdVec;
 use soroban_sdk::{Address, Env, String, Vec, contracttype};
+use warpdrive_shared::ttl;
 use warpdrive_shared::vec_history::{self, Entry, VecHistoryStore};
 
 pub use warpdrive_shared::interfaces::PubKey;
@@ -69,6 +70,12 @@ pub fn get_threshold(env: &Env) -> Threshold {
 
 pub fn set_threshold(env: &Env, threshold: &Threshold) {
     env.storage().instance().set(&DataKey::Threshold, threshold);
+}
+
+pub fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(ttl::INSTANCE_RENEWAL_THRESHOLD, ttl::INSTANCE_TARGET_TTL);
 }
 
 // ── Total weight (current snapshot) ─────────────────────────────────
@@ -155,16 +162,30 @@ pub fn list_signers(env: &Env) -> Vec<SignerInfo> {
 }
 
 fn all_signers(env: &Env) -> Vec<PubKey> {
-    env.storage()
+    let key = DataKey::AllSigners;
+    let result = env
+        .storage()
         .persistent()
-        .get(&DataKey::AllSigners)
-        .unwrap_or_else(|| Vec::new(env))
+        .get(&key)
+        .unwrap_or_else(|| Vec::new(env));
+    if !result.is_empty() {
+        env.storage().persistent().extend_ttl(
+            &key,
+            ttl::PERSISTENT_RENEWAL_THRESHOLD,
+            ttl::PERSISTENT_TARGET_TTL,
+        );
+    }
+    result
 }
 
 fn set_all_signers(env: &Env, signers: &Vec<PubKey>) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::AllSigners, signers)
+    let key = DataKey::AllSigners;
+    env.storage().persistent().set(&key, signers);
+    env.storage().persistent().extend_ttl(
+        &key,
+        ttl::PERSISTENT_RENEWAL_THRESHOLD,
+        ttl::PERSISTENT_TARGET_TTL,
+    );
 }
 
 fn insert_all_signers(env: &Env, key: PubKey) {
@@ -209,6 +230,13 @@ fn load_history(env: &Env, key: &DataKey) -> StdVec<Entry<u64>> {
         .persistent()
         .get(key)
         .unwrap_or_else(|| Vec::new(env));
+    if !stored.is_empty() {
+        env.storage().persistent().extend_ttl(
+            key,
+            ttl::PERSISTENT_RENEWAL_THRESHOLD,
+            ttl::PERSISTENT_TARGET_TTL,
+        );
+    }
     let mut result = StdVec::with_capacity(stored.len() as usize);
     for i in 0..stored.len() {
         let sc = stored.get(i).unwrap();
@@ -229,6 +257,11 @@ fn save_history(env: &Env, key: &DataKey, entries: StdVec<Entry<u64>>) {
         });
     }
     env.storage().persistent().set(key, &stored);
+    env.storage().persistent().extend_ttl(
+        key,
+        ttl::PERSISTENT_RENEWAL_THRESHOLD,
+        ttl::PERSISTENT_TARGET_TTL,
+    );
 }
 
 pub struct SignerWeightHistory<'a> {
