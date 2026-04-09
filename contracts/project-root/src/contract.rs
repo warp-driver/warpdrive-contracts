@@ -1,6 +1,9 @@
 use soroban_sdk::{Address, BytesN, Env, String, contract, contractimpl};
 
-use warpdrive_shared::interfaces::project_root::{ProjectRootInterface, ProjectRootUpgraded};
+use warpdrive_shared::interfaces::{
+    project_root::ProjectRootInterface,
+    warpdrive::{ContractUpgraded, WarpDriveInterface},
+};
 
 use crate::storage;
 
@@ -9,21 +12,30 @@ pub struct ProjectRoot;
 
 #[contractimpl]
 impl ProjectRoot {
-    pub fn __constructor(env: Env, admin: Address) {
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        security_contract: Address,
+        verification_contract: Address,
+        project_spec_repo: String,
+    ) {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
+        storage::set_security_contract(&env, &security_contract);
+        storage::set_verification_contract(&env, &verification_contract);
+        storage::set_project_spec_repo(&env, &project_spec_repo);
     }
 }
 
 #[contractimpl]
-impl ProjectRootInterface for ProjectRoot {
+impl WarpDriveInterface for ProjectRoot {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
-        ProjectRootUpgraded::new(new_version).publish(&env);
+        ContractUpgraded::new(new_version).publish(&env);
     }
 
     fn admin(env: Env) -> Address {
@@ -45,5 +57,25 @@ impl ProjectRootInterface for ProjectRoot {
 
     fn version(env: Env) -> String {
         storage::get_version(&env)
+    }
+}
+
+#[contractimpl]
+impl ProjectRootInterface for ProjectRoot {
+    fn update_project_spec_repo(env: Env, repo: String) {
+        storage::get_admin(&env).require_auth();
+        storage::set_project_spec_repo(&env, &repo);
+    }
+
+    fn security_contract(env: Env) -> Address {
+        storage::get_security_contract(&env)
+    }
+
+    fn verification_contract(env: Env) -> Address {
+        storage::get_verification_contract(&env)
+    }
+
+    fn project_spec_repo(env: Env) -> String {
+        storage::get_project_spec_repo(&env)
     }
 }

@@ -1,10 +1,9 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, String, contract, contractimpl, xdr::FromXdr};
 
 use warpdrive_shared::interfaces::{
-    handler::{
-        HandlerError, HandlerInterface, HandlerUpgraded, SignatureData, Verified, XlmEnvelope,
-    },
+    handler::{HandlerError, HandlerInterface, SignatureData, Verified, XlmEnvelope},
     verification::{VerificationClient, VerifyError},
+    warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
 use crate::envelope::Envelope as EthEnvelope;
@@ -54,14 +53,14 @@ impl Handler {
 }
 
 #[contractimpl]
-impl HandlerInterface for Handler {
+impl WarpDriveInterface for Handler {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
-        HandlerUpgraded::new(new_version).publish(&env);
+        ContractUpgraded::new(new_version).publish(&env);
     }
 
     fn admin(env: Env) -> Address {
@@ -84,7 +83,10 @@ impl HandlerInterface for Handler {
     fn version(env: Env) -> String {
         storage::get_version(&env)
     }
+}
 
+#[contractimpl]
+impl HandlerInterface for Handler {
     fn verification_contract(env: Env) -> Address {
         storage::get_verification_contract(&env)
     }

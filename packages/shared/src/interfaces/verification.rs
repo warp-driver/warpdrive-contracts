@@ -1,8 +1,7 @@
-use soroban_sdk::{
-    Address, Bytes, BytesN, Env, String, Vec, contractclient, contracterror, contractevent,
-};
+use soroban_sdk::{Address, Bytes, BytesN, Env, Vec, contractclient, contracterror};
 
 use super::PubKey;
+use super::warpdrive::WarpDriveInterface;
 
 // ── Error ────────────────────────────────────────────────────────────
 
@@ -20,29 +19,11 @@ pub enum VerifyError {
     ZeroRequiredWeight = 307,
 }
 
-// ── Events ───────────────────────────────────────────────────────────
-
-#[contractevent]
-pub struct VerificationUpgraded {
-    pub version: String,
-}
-
-impl VerificationUpgraded {
-    pub fn new(version: String) -> Self {
-        Self { version }
-    }
-}
-
 // ── Interface trait (compile-time contract conformance) ──────────────
 
 #[contractclient(name = "VerificationClient")]
-pub trait VerificationInterface {
-    fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String);
-    fn admin(env: Env) -> Address;
-    fn pending_admin(env: Env) -> Option<Address>;
-    fn propose_admin(env: Env, new_admin: Address);
-    fn accept_admin(env: Env);
-    fn version(env: Env) -> String;
+pub trait VerificationInterface: WarpDriveInterface {
+    // Queries
     fn security_contract(env: Env) -> Address;
     fn required_weight(env: Env) -> u64;
     fn signer_weight(env: Env, signer_pubkey: PubKey) -> u64;

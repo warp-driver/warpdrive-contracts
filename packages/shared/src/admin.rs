@@ -1,30 +1,5 @@
-use soroban_sdk::{Address, Env, contractevent, symbol_short};
-
-#[contractevent]
-pub struct AdminProposed {
-    pub old_admin: Address,
-    pub new_admin: Address,
-}
-
-impl AdminProposed {
-    pub fn new(old_admin: Address, new_admin: Address) -> Self {
-        Self {
-            old_admin,
-            new_admin,
-        }
-    }
-}
-
-#[contractevent]
-pub struct AdminAccepted {
-    pub new_admin: Address,
-}
-
-impl AdminAccepted {
-    pub fn new(new_admin: Address) -> Self {
-        Self { new_admin }
-    }
-}
+pub use crate::interfaces::warpdrive::{AdminAccepted, AdminProposed};
+use soroban_sdk::{Address, Env, symbol_short};
 
 /// Store a pending admin transfer. Requires auth from the current admin.
 pub fn propose(env: &Env, current_admin: &Address, new_admin: Address) {

@@ -3,7 +3,8 @@ use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contractim
 use warpdrive_shared::interfaces::{
     PubKey,
     security::SecurityClient,
-    verification::{VerificationInterface, VerificationUpgraded, VerifyError},
+    verification::{VerificationInterface, VerifyError},
+    warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
 use crate::storage;
@@ -22,14 +23,14 @@ impl Verification {
 }
 
 #[contractimpl]
-impl VerificationInterface for Verification {
+impl WarpDriveInterface for Verification {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
-        VerificationUpgraded::new(new_version).publish(&env);
+        ContractUpgraded::new(new_version).publish(&env);
     }
 
     fn admin(env: Env) -> Address {
@@ -52,7 +53,10 @@ impl VerificationInterface for Verification {
     fn version(env: Env) -> String {
         storage::get_version(&env)
     }
+}
 
+#[contractimpl]
+impl VerificationInterface for Verification {
     fn security_contract(env: Env) -> Address {
         storage::get_security_contract(&env)
     }
@@ -67,11 +71,6 @@ impl VerificationInterface for Verification {
         SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
     }
 
-    /// Checks a single signature and returns the signer's weight if valid.
-    /// Does NOT check against the threshold — use `verify` for full multi-sig validation.
-    ///
-    /// When `reference_block` is `None`, uses the current signer weight.
-    /// When `Some(block)`, uses the historical weight at that ledger.
     fn check_one(
         env: Env,
         envelope: Bytes,
@@ -112,8 +111,6 @@ impl VerificationInterface for Verification {
             return Err(VerifyError::LengthMismatch);
         }
 
-        // Batch-fetch all signer weights and required weight in two cross-contract calls
-        // instead of one per signer.
         let security_addr = storage::get_security_contract(&env);
         let security = SecurityClient::new(&env, &security_addr);
         let weights = security.get_signer_weights_at(&signer_pubkeys, &reference_block);
@@ -130,7 +127,6 @@ impl VerificationInterface for Verification {
             let sig = signatures.get(i).unwrap();
             let pubkey = signer_pubkeys.get(i).unwrap();
 
-            // Enforce strict ascending order of pubkeys (no duplicates)
             if let Some(ref prev) = prev_pubkey
                 && pubkey.to_array() <= prev.to_array()
             {

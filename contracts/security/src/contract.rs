@@ -4,8 +4,8 @@ use warpdrive_shared::interfaces::{
     PubKey,
     security::{
         SecurityError, SecurityInterface, SignerAdded, SignerInfo, SignerRemoved, ThresholdSet,
-        Upgraded,
     },
+    warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
 use crate::storage::{self, Threshold};
@@ -41,13 +41,13 @@ impl Security {
 }
 
 #[contractimpl]
-impl SecurityInterface for Security {
+impl WarpDriveInterface for Security {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         storage::get_admin(&env).require_auth();
 
         storage::set_version(&env, &new_version);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
-        Upgraded::new(new_version).publish(&env);
+        ContractUpgraded::new(new_version).publish(&env);
     }
 
     fn admin(env: Env) -> Address {
@@ -70,7 +70,10 @@ impl SecurityInterface for Security {
     fn version(env: Env) -> String {
         storage::get_version(&env)
     }
+}
 
+#[contractimpl]
+impl SecurityInterface for Security {
     fn add_signer(env: Env, key: PubKey, weight: u64) -> Result<(), SecurityError> {
         storage::get_admin(&env).require_auth();
         if weight == 0 {
@@ -85,6 +88,22 @@ impl SecurityInterface for Security {
         storage::get_admin(&env).require_auth();
         storage::remove_signer(&env, key.clone());
         SignerRemoved::new(key).publish(&env);
+    }
+
+    fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError> {
+        storage::get_admin(&env).require_auth();
+        if denominator == 0 {
+            return Err(SecurityError::ZeroDenominator);
+        }
+        if numerator == 0 {
+            return Err(SecurityError::ZeroNumerator);
+        }
+        if numerator > denominator {
+            return Err(SecurityError::NumeratorExceedsDenominator);
+        }
+        storage::set_threshold(&env, &Threshold::new(numerator, denominator));
+        ThresholdSet::new(numerator, denominator).publish(&env);
+        Ok(())
     }
 
     fn get_total_weight(env: Env) -> u64 {
@@ -119,22 +138,6 @@ impl SecurityInterface for Security {
 
     fn list_signers(env: Env) -> Vec<SignerInfo> {
         storage::list_signers(&env)
-    }
-
-    fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError> {
-        storage::get_admin(&env).require_auth();
-        if denominator == 0 {
-            return Err(SecurityError::ZeroDenominator);
-        }
-        if numerator == 0 {
-            return Err(SecurityError::ZeroNumerator);
-        }
-        if numerator > denominator {
-            return Err(SecurityError::NumeratorExceedsDenominator);
-        }
-        storage::set_threshold(&env, &Threshold::new(numerator, denominator));
-        ThresholdSet::new(numerator, denominator).publish(&env);
-        Ok(())
     }
 
     fn threshold_numerator(env: Env) -> u64 {
