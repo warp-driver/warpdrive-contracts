@@ -1,6 +1,7 @@
 use soroban_sdk::{Bytes, BytesN, Env, crypto::Hash};
 
-pub use warpdrive_shared::interfaces::PubKey;
+/// Compressed secp256k1 public key (33 bytes)
+type PubKey = BytesN<33>;
 
 /// EIP-191 hash: `keccak256("\x19Ethereum Signed Message:\n32" || digest)`
 ///

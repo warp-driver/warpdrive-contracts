@@ -1,6 +1,7 @@
 extern crate std;
 
-use crate::storage::PubKey;
+use soroban_sdk::BytesN;
+type PubKey = BytesN<33>;
 
 use super::setup::deploy_contract;
 use soroban_sdk::{
