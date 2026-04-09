@@ -18,13 +18,12 @@ fn benchmark_max_signatures() {
     std::println!("Signature capacity benchmark (secp256k1 + EIP-191)");
     std::println!("{:-<80}", "");
     std::println!(
-        "{:>4}  {:>14}  {:>12}  {:>10}  {:>10}  {}",
+        "{:>4}  {:>14}  {:>12}  {:>10}  {:>10}  Status",
         "N",
         "CPU",
         "Memory",
         "ReadEntry",
-        "WriteEntry",
-        "Status"
+        "WriteEntry"
     );
     std::println!("{:-<80}", "");
 
