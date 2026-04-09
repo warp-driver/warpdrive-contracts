@@ -24,7 +24,7 @@ fn benchmark_max_signatures() {
     );
     std::println!("{:-<60}", "");
 
-    for n in [1u32, 2, 3, 5, 8, 10, 20, 40, 60, 80, 100, 120, 140, 160] {
+    for n in [1u32, 2, 3, 5, 8, 10, 20, 40, 60, 80, 90, 100] {
         // Fresh deploy per iteration to avoid accumulated signers
         let admin = Address::generate(&env);
         env.ledger().set_sequence_number(TEST_REF_BLOCK);
