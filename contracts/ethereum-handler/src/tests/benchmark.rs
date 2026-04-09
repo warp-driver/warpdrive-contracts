@@ -3,7 +3,9 @@ extern crate std;
 
 use crate::{EthereumHandler, EthereumHandlerClient};
 
-use soroban_sdk::{Address, Env, testutils::{Address as _, EnvTestConfig, Ledger as _}};
+use soroban_sdk::{
+    Address, Env, testutils::Address as _, testutils::EnvTestConfig, testutils::Ledger as _,
+};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
 use warpdrive_secp256k1_verification::Secp256k1Verification;
 use warpdrive_shared::testutils::{make_secp256k1_key, secp256k1_pubkey};
@@ -17,7 +19,12 @@ fn benchmark_max_signatures() {
     std::println!("{:-<80}", "");
     std::println!(
         "{:>4}  {:>14}  {:>12}  {:>10}  {:>10}  {}",
-        "N", "CPU", "Memory", "ReadEntry", "WriteEntry", "Status"
+        "N",
+        "CPU",
+        "Memory",
+        "ReadEntry",
+        "WriteEntry",
+        "Status"
     );
     std::println!("{:-<80}", "");
 
@@ -85,7 +92,10 @@ fn benchmark_max_signatures() {
             Err(_) => {
                 std::println!(
                     "{n:>4}  {:>14}  {:>12}  {:>10}  {:>10}  EXCEEDED",
-                    "-", "-", "-", "-"
+                    "-",
+                    "-",
+                    "-",
+                    "-"
                 );
             }
         }
