@@ -9,7 +9,8 @@ vars:
     - secp256k1-verification
     - ed25519-security
     - ed25519-verification
-    - handler
+    - ethereum-handler
+    - stellar-handler
 
 tasks:
   default:

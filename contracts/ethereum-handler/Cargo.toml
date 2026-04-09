@@ -1,0 +1,24 @@
+[package]
+name = "warpdrive-ethereum-handler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true, features = ["alloc"] }
+alloy-sol-types = { workspace = true }
+alloy-primitives = { workspace = true }
+warpdrive-shared = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+warpdrive-secp256k1-security = { workspace = true }
+warpdrive-secp256k1-verification = { workspace = true }
+warpdrive-shared = { workspace = true, features = ["testutils"] }
+hex-literal = { workspace = true }

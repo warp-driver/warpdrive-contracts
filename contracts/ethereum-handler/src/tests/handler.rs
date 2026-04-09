@@ -2,14 +2,12 @@ extern crate alloc;
 extern crate std;
 
 use crate::envelope::Envelope;
-use crate::{Handler, HandlerClient, HandlerError, SignatureData};
+use crate::{EthereumHandler, EthereumHandlerClient, HandlerError, SignatureData};
 use alloy_primitives::FixedBytes;
 use alloy_sol_types::SolValue;
-use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
 use warpdrive_secp256k1_verification::Secp256k1Verification;
-use warpdrive_shared::interfaces::handler::XlmEnvelope;
 use warpdrive_shared::testutils::{
     CompressedSecpPubKey, SecpSigningKey, make_secp256k1_key, secp256k1_pubkey,
     secp256k1_sign_envelope,
@@ -34,19 +32,6 @@ fn make_envelope_bytes_eth(env: &Env, event_id_seed: u8) -> Bytes {
     Bytes::from_slice(env, &encoded)
 }
 
-fn make_envelope_bytes_xlm(env: &Env, event_id_seed: u8) -> Bytes {
-    let mut event_id = [0u8; 20];
-    event_id[0] = event_id_seed;
-
-    let envelope = XlmEnvelope {
-        event_id: BytesN::from_array(env, &event_id),
-        ordering: BytesN::from_array(env, &[0u8; 12]),
-        payload: Bytes::from_slice(env, &[event_id_seed; 8]),
-    };
-
-    envelope.to_xdr(env)
-}
-
 fn expected_event_id(env: &Env, seed: u8) -> BytesN<20> {
     let mut id = [0u8; 20];
     id[0] = seed;
@@ -64,7 +49,7 @@ fn expected_payload(env: &Env, seed: u8) -> Bytes {
 fn setup_handler_with_signers(
     env: &Env,
 ) -> (
-    HandlerClient<'_>,
+    EthereumHandlerClient<'_>,
     SecpSigningKey,
     CompressedSecpPubKey,
     SecpSigningKey,
@@ -86,8 +71,8 @@ fn setup_handler_with_signers(
     security.mock_all_auths().add_signer(&pk2, &200);
 
     let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
-    let handler_id = env.register(Handler, (&admin, &verification_id));
-    let client = HandlerClient::new(env, &handler_id);
+    let handler_id = env.register(EthereumHandler, (&admin, &verification_id));
+    let client = EthereumHandlerClient::new(env, &handler_id);
 
     // Advance ledger so reference_block is in the past
     env.ledger().set_sequence_number(TEST_CURRENT_LEDGER);
@@ -251,179 +236,7 @@ fn test_verify_insufficient_weight_fails() {
     assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
 }
 
-/********************** XLM VARIANT *******************/
-
-#[test]
-fn test_verify_success_xlm() {
-    let env = Env::default();
-    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
-
-    let envelope = make_envelope_bytes_xlm(&env, 1);
-    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
-
-    let result = client.try_verify_xlm(&envelope, &sig_data);
-    assert_eq!(result, Ok(Ok(())));
-
-    assert_eq!(
-        client.payload(&expected_event_id(&env, 1)),
-        Some(expected_payload(&env, 1))
-    );
-}
-
-#[test]
-fn test_verify_success_combined_weight_xlm() {
-    let env = Env::default();
-    let (client, key1, pk1, key2, pk2) = setup_handler_with_signers(&env);
-
-    let envelope = make_envelope_bytes_xlm(&env, 1);
-    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1), (key2, pk2)]);
-
-    let result = client.try_verify_xlm(&envelope, &sig_data);
-    assert_eq!(result, Ok(Ok(())));
-
-    assert_eq!(
-        client.payload(&expected_event_id(&env, 1)),
-        Some(expected_payload(&env, 1))
-    );
-}
-
-#[test]
-fn test_verify_duplicate_event_fails_xlm() {
-    let env = Env::default();
-    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
-
-    let envelope = make_envelope_bytes_xlm(&env, 1);
-    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
-
-    let result = client.try_verify_xlm(&envelope, &sig_data);
-    assert_eq!(result, Ok(Ok(())));
-
-    assert_eq!(
-        client.payload(&expected_event_id(&env, 1)),
-        Some(expected_payload(&env, 1))
-    );
-
-    let result = client.try_verify_xlm(&envelope, &sig_data);
-    assert_eq!(result, Err(Ok(HandlerError::EventAlreadySeen)));
-}
-
-#[test]
-fn test_verify_different_events_succeed_xlm() {
-    let env = Env::default();
-    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
-
-    let env1 = make_envelope_bytes_xlm(&env, 1);
-    let env2 = make_envelope_bytes_xlm(&env, 2);
-    let sig1 = make_sig_data(&env, &env1.to_alloc_vec(), &[(key2.clone(), pk2.clone())]);
-    let sig2 = make_sig_data(&env, &env2.to_alloc_vec(), &[(key2, pk2)]);
-
-    assert_eq!(client.try_verify_xlm(&env1, &sig1), Ok(Ok(())));
-    assert_eq!(
-        client.payload(&expected_event_id(&env, 1)),
-        Some(expected_payload(&env, 1))
-    );
-
-    assert_eq!(
-        client.try_verify_xlm(&env1, &sig1),
-        Err(Ok(HandlerError::EventAlreadySeen))
-    );
-    assert_eq!(client.try_verify_xlm(&env2, &sig2), Ok(Ok(())));
-    assert_eq!(
-        client.payload(&expected_event_id(&env, 2)),
-        Some(expected_payload(&env, 2))
-    );
-}
-
-#[test]
-fn test_verify_invalid_signature_fails_xlm() {
-    let env = Env::default();
-    let (client, _key1, _pk1, _key2, pk2) = setup_handler_with_signers(&env);
-
-    let envelope = make_envelope_bytes_xlm(&env, 1);
-
-    let mut signers: Vec<CompressedSecpPubKey> = Vec::new(&env);
-    signers.push_back(pk2);
-    let mut signatures: Vec<BytesN<65>> = Vec::new(&env);
-    signatures.push_back(BytesN::from_array(&env, &[0xAA; 65]));
-
-    let sig_data = SignatureData {
-        signers,
-        signatures,
-        reference_block: TEST_REF_BLOCK,
-    };
-
-    assert_eq!(
-        client.try_verify_xlm(&envelope, &sig_data),
-        Err(Ok(HandlerError::InvalidSignature)),
-    );
-
-    assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
-}
-
-#[test]
-fn test_verify_insufficient_weight_fails_xlm() {
-    let env = Env::default();
-    let (client, key1, pk1, _key2, _pk2) = setup_handler_with_signers(&env);
-
-    let envelope = make_envelope_bytes_xlm(&env, 1);
-    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key1, pk1)]);
-
-    assert_eq!(
-        client.try_verify_xlm(&envelope, &sig_data),
-        Err(Ok(HandlerError::InsufficientWeight)),
-    );
-
-    assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
-}
-
-/********************* XLM vs ETH **************************/
-
-#[test]
-fn test_eth_refuses_xlm_packets() {
-    let env = Env::default();
-    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
-
-    let envelope = make_envelope_bytes_xlm(&env, 1);
-    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
-
-    // Must fail with InvalidEnvelope — XLM data is not valid ABI
-    assert_eq!(
-        client.try_verify_eth(&envelope, &sig_data),
-        Err(Ok(HandlerError::InvalidEnvelope)),
-    );
-
-    // Must pass
-    let result = client.try_verify_xlm(&envelope, &sig_data);
-    assert_eq!(result, Ok(Ok(())));
-
-    assert_eq!(
-        client.payload(&expected_event_id(&env, 1)),
-        Some(expected_payload(&env, 1))
-    );
-}
-
-#[test]
-fn test_xlm_refuses_eth_packets() {
-    let env = Env::default();
-    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
-
-    let envelope = make_envelope_bytes_eth(&env, 1);
-    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
-
-    // Must fail — ETH data is not valid XDR (from_xdr panics at host level)
-    assert!(client.try_verify_xlm(&envelope, &sig_data).is_err());
-
-    // Must pass
-    let result = client.try_verify_eth(&envelope, &sig_data);
-    assert_eq!(result, Ok(Ok(())));
-
-    assert_eq!(
-        client.payload(&expected_event_id(&env, 1)),
-        Some(expected_payload(&env, 1))
-    );
-}
-
-// ── M-3: Malformed envelope tests ───────────────────────────────────
+// ── Malformed envelope tests ────────────────────────────────────────
 
 #[test]
 fn test_verify_eth_malformed_envelope() {
@@ -439,19 +252,7 @@ fn test_verify_eth_malformed_envelope() {
     );
 }
 
-#[test]
-fn test_verify_xlm_malformed_envelope() {
-    let env = Env::default();
-    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
-
-    let garbage = Bytes::from_slice(&env, &[0xDE, 0xAD, 0xBE, 0xEF]);
-    let sig_data = make_sig_data(&env, &garbage.to_alloc_vec(), &[(key2, pk2)]);
-
-    // from_xdr on garbage bytes fails
-    assert!(client.try_verify_xlm(&garbage, &sig_data).is_err());
-}
-
-// ── T-7: Remaining error propagation paths ──────────────────────────
+// ── Remaining error propagation paths ──────────────────────────
 
 #[test]
 fn test_verify_empty_signatures_fails() {
@@ -576,8 +377,8 @@ fn test_verification_contract_getter() {
     env.ledger().set_sequence_number(TEST_REF_BLOCK);
     let security_id = env.register(Secp256k1Security, (&admin, 55u64, 100u64));
     let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
-    let handler_id = env.register(Handler, (&admin, &verification_id));
-    let client = HandlerClient::new(&env, &handler_id);
+    let handler_id = env.register(EthereumHandler, (&admin, &verification_id));
+    let client = EthereumHandlerClient::new(&env, &handler_id);
 
     assert_eq!(client.verification_contract(), verification_id);
 }
@@ -661,8 +462,8 @@ fn test_verify_historical_passes_current_fails() {
     security.mock_all_auths().add_signer(&pk2, &200);
 
     let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
-    let handler_id = env.register(Handler, (&admin, &verification_id));
-    let client = HandlerClient::new(&env, &handler_id);
+    let handler_id = env.register(EthereumHandler, (&admin, &verification_id));
+    let client = EthereumHandlerClient::new(&env, &handler_id);
 
     // Ledger 50: reduce key2 to 50 → total=150, required=82, key2 alone=50 < 82
     env.ledger().set_sequence_number(50);
@@ -724,8 +525,8 @@ fn test_verify_historical_fails_current_passes() {
     security.mock_all_auths().add_signer(&pk2, &200);
 
     let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
-    let handler_id = env.register(Handler, (&admin, &verification_id));
-    let client = HandlerClient::new(&env, &handler_id);
+    let handler_id = env.register(EthereumHandler, (&admin, &verification_id));
+    let client = EthereumHandlerClient::new(&env, &handler_id);
 
     // Ledger 50: key1=200, remove key2 → total=200, required=110, key1 alone=200 >= 110
     env.ledger().set_sequence_number(50);

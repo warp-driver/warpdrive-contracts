@@ -1,4 +1,5 @@
 use soroban_sdk::{Address, Env, String, contracttype};
+use warpdrive_shared::ttl;
 
 #[contracttype]
 pub enum DataKey {
@@ -34,4 +35,10 @@ pub fn set_security_contract(env: &Env, address: &Address) {
     env.storage()
         .instance()
         .set(&DataKey::SecurityContract, address);
+}
+
+pub fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(ttl::INSTANCE_RENEWAL_THRESHOLD, ttl::INSTANCE_TARGET_TTL);
 }

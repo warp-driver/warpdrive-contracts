@@ -20,6 +20,8 @@ warpdrive-secp256k1-security = { path = "contracts/secp256k1-security" }
 warpdrive-secp256k1-verification = { path = "contracts/secp256k1-verification" }
 warpdrive-ed25519-security = { path = "contracts/ed25519-security" }
 warpdrive-ed25519-verification = { path = "contracts/ed25519-verification" }
+warpdrive-ethereum-handler = { path = "contracts/ethereum-handler" }
+warpdrive-stellar-handler = { path = "contracts/stellar-handler" }
 alloy-sol-types = { version = "1", default-features = false }
 alloy-primitives = { version = "1", default-features = false }
 hex-literal = "0.4.1"

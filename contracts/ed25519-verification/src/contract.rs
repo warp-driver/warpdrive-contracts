@@ -19,6 +19,7 @@ impl Ed25519Verification {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_security_contract(&env, &security_contract);
+        storage::extend_instance_ttl(&env);
     }
 }
 
@@ -29,6 +30,7 @@ impl WarpDriveInterface for Ed25519Verification {
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
+        storage::extend_instance_ttl(&env);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         ContractUpgraded::new(new_version).publish(&env);
     }
@@ -120,6 +122,8 @@ impl Ed25519VerificationInterface for Ed25519Verification {
         signer_pubkeys: Vec<Ed25519PubKey>,
         reference_block: u32,
     ) -> Result<(), VerifyError> {
+        storage::extend_instance_ttl(&env);
+
         if signatures.is_empty() {
             return Err(VerifyError::EmptySignatures);
         }

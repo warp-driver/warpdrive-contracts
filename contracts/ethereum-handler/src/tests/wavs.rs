@@ -1,7 +1,7 @@
 // This file tests compatibility with WAVS, using code from github.com/Lay3rLabs/WAVS to generate a test vector.
 // In particular, this is slightly adapted from the test case at  packages/utils/src/evm_client/signing.rs:196-259
 
-use crate::{Handler, HandlerClient, HandlerError, SignatureData};
+use crate::{EthereumHandler, EthereumHandlerClient, HandlerError, SignatureData};
 use hex_literal::hex;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
@@ -49,7 +49,7 @@ const TEST_REF_BLOCK: u32 = 10;
 
 type PubKey = BytesN<33>;
 
-fn setup_handler_with_signer<'a>(env: &'a Env, pubkey: &[u8; 33]) -> HandlerClient<'a> {
+fn setup_handler_with_signer<'a>(env: &'a Env, pubkey: &[u8; 33]) -> EthereumHandlerClient<'a> {
     let admin = soroban_sdk::Address::generate(env);
 
     let pk = PubKey::from_array(env, pubkey);
@@ -61,11 +61,11 @@ fn setup_handler_with_signer<'a>(env: &'a Env, pubkey: &[u8; 33]) -> HandlerClie
     security.mock_all_auths().add_signer(&pk, &100);
 
     let verification_id = env.register(Secp256k1Verification, (&admin, &security_id));
-    let handler_id = env.register(Handler, (&admin, &verification_id));
+    let handler_id = env.register(EthereumHandler, (&admin, &verification_id));
 
     env.ledger().set_sequence_number(100);
 
-    HandlerClient::new(env, &handler_id)
+    EthereumHandlerClient::new(env, &handler_id)
 }
 
 #[test]

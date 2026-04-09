@@ -52,20 +52,6 @@ pub fn secp256k1_sign_envelope(key: &SecpSigningKey, envelope: &[u8]) -> [u8; 65
     result
 }
 
-// pub use SecpSigningKey as SigningKey;
-
-// pub fn make_signing_key(seed: u8) -> SecpSigningKey {
-//     make_secp256k1_key(seed)
-// }
-
-// pub fn compressed_pubkey(env: &Env, key: &SecpSigningKey) -> CompressedSecpPubKey {
-//     secp256k1_pubkey(env, key)
-// }
-
-// pub fn sign_envelope(key: &SecpSigningKey, envelope: &[u8]) -> [u8; 65] {
-//     secp256k1_sign_envelope(key, envelope)
-// }
-
 // ── Ed25519 ─────────────────────────────────────────────────────────
 
 /// Deterministically generate an ed25519 signing key from a seed byte.

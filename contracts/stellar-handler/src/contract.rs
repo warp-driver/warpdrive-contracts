@@ -1,12 +1,11 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, String, contract, contractimpl, xdr::FromXdr};
 
 use warpdrive_shared::interfaces::{
-    handler::{HandlerError, HandlerInterface, SignatureData, Verified, XlmEnvelope},
-    verification::{Secp256k1VerificationClient, VerifyError},
+    handler::{Ed25519SignatureData, HandlerError, StellarHandlerInterface, Verified, XlmEnvelope},
+    verification::{Ed25519VerificationClient, VerifyError},
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
-use crate::envelope::Envelope as EthEnvelope;
 use crate::storage;
 
 /// Maximum age (in ledgers) allowed for a reference block.
@@ -41,26 +40,24 @@ fn map_verify_result(
 }
 
 #[contract]
-pub struct Handler;
+pub struct StellarHandler;
 
 #[contractimpl]
-impl Handler {
+impl StellarHandler {
     pub fn __constructor(env: Env, admin: Address, verification_contract: Address) {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_verification_contract(&env, &verification_contract);
-        storage::extend_instance_ttl(&env);
     }
 }
 
 #[contractimpl]
-impl WarpDriveInterface for Handler {
+impl WarpDriveInterface for StellarHandler {
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>, new_version: String) {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
-        storage::extend_instance_ttl(&env);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         ContractUpgraded::new(new_version).publish(&env);
     }
@@ -88,58 +85,13 @@ impl WarpDriveInterface for Handler {
 }
 
 #[contractimpl]
-impl HandlerInterface for Handler {
+impl StellarHandlerInterface for StellarHandler {
     fn verification_contract(env: Env) -> Address {
         storage::get_verification_contract(&env)
     }
 
     fn payload(env: Env, event_id: BytesN<20>) -> Option<Bytes> {
         storage::get_payload(&env, event_id)
-    }
-
-    /// Verifies the packet, assuming the envelope is ABI-encoded (Ethereum format) for compatibility.
-    ///
-    /// No caller authorization is required — this is intentional. Security is enforced entirely
-    /// through cryptographic signature verification of the envelope contents.
-    fn verify_eth(
-        env: Env,
-        envelope_bytes: Bytes,
-        sig_data: SignatureData,
-    ) -> Result<(), HandlerError> {
-        storage::extend_instance_ttl(&env);
-        validate_reference_block(&env, sig_data.reference_block)?;
-
-        // Parse the ABI-encoded envelope
-        let envelope =
-            EthEnvelope::abi_decode_from(&envelope_bytes).ok_or(HandlerError::InvalidEnvelope)?;
-        let event_id = BytesN::from_array(&env, &envelope.eventId.0);
-
-        // Check for duplicate event
-        if storage::is_event_seen(&env, &event_id) {
-            return Err(HandlerError::EventAlreadySeen);
-        }
-
-        // Verify signatures via the verification contract
-        let verification_addr = storage::get_verification_contract(&env);
-        let verification = Secp256k1VerificationClient::new(&env, &verification_addr);
-        let res = verification.try_verify(
-            &envelope_bytes,
-            &sig_data.signatures,
-            &sig_data.signers,
-            &sig_data.reference_block,
-        );
-        map_verify_result(res)?;
-
-        // Mark event as seen
-        storage::mark_event_seen(&env, &event_id);
-
-        // Save payload
-        let payload = Bytes::from_slice(&env, envelope.payload.as_ref());
-        storage::save_payload(&env, event_id.clone(), payload);
-
-        Verified::new(event_id).publish(&env);
-
-        Ok(())
     }
 
     /// Verifies the packet, assuming the envelope is XDR-encoded (Soroban native format).
@@ -149,7 +101,7 @@ impl HandlerInterface for Handler {
     fn verify_xlm(
         env: Env,
         envelope_bytes: Bytes,
-        sig_data: SignatureData,
+        sig_data: Ed25519SignatureData,
     ) -> Result<(), HandlerError> {
         storage::extend_instance_ttl(&env);
         validate_reference_block(&env, sig_data.reference_block)?;
@@ -164,9 +116,9 @@ impl HandlerInterface for Handler {
             return Err(HandlerError::EventAlreadySeen);
         }
 
-        // Verify signatures against the raw envelope bytes (what was actually signed)
+        // Verify signatures via the verification contract
         let verification_addr = storage::get_verification_contract(&env);
-        let verification = Secp256k1VerificationClient::new(&env, &verification_addr);
+        let verification = Ed25519VerificationClient::new(&env, &verification_addr);
         let res = verification.try_verify(
             &envelope_bytes,
             &sig_data.signatures,

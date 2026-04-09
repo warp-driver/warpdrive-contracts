@@ -1,5 +1,5 @@
 [package]
-name = "warpdrive-handler"
+name = "warpdrive-stellar-handler"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,14 +11,11 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-soroban-sdk = { workspace = true, features = ["alloc"] }
-alloy-sol-types = { workspace = true }
-alloy-primitives = { workspace = true }
+soroban-sdk = { workspace = true }
 warpdrive-shared = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-warpdrive-secp256k1-security = { workspace = true }
-warpdrive-secp256k1-verification = { workspace = true }
+warpdrive-ed25519-security = { workspace = true }
+warpdrive-ed25519-verification = { workspace = true }
 warpdrive-shared = { workspace = true, features = ["testutils"] }
-hex-literal = { workspace = true }

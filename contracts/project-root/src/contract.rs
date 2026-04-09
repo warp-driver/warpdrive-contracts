@@ -5,7 +5,7 @@ use warpdrive_shared::interfaces::{
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
-use crate::storage;
+use crate::storage::{self, VerificationType};
 
 #[contract]
 pub struct ProjectRoot;
@@ -18,12 +18,14 @@ impl ProjectRoot {
         security_contract: Address,
         verification_contract: Address,
         project_spec_repo: String,
+        verification_type: VerificationType,
     ) {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_security_contract(&env, &security_contract);
         storage::set_verification_contract(&env, &verification_contract);
         storage::set_project_spec_repo(&env, &project_spec_repo);
+        storage::set_verification_type(&env, &verification_type);
         storage::extend_instance_ttl(&env);
     }
 }
@@ -79,5 +81,9 @@ impl ProjectRootInterface for ProjectRoot {
 
     fn project_spec_repo(env: Env) -> String {
         storage::get_project_spec_repo(&env)
+    }
+
+    fn verification_type(env: Env) -> VerificationType {
+        storage::get_verification_type(&env)
     }
 }

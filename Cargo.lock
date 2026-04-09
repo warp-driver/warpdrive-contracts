@@ -1910,7 +1910,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "warpdrive-handler"
+name = "warpdrive-ethereum-handler"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
@@ -1958,6 +1958,16 @@ dependencies = [
  "sha2",
  "sha3",
  "soroban-sdk",
+]
+
+[[package]]
+name = "warpdrive-stellar-handler"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "warpdrive-ed25519-security",
+ "warpdrive-ed25519-verification",
+ "warpdrive-shared",
 ]
 
 [[package]]

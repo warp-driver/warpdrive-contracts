@@ -2,9 +2,9 @@ use soroban_sdk::{
     Address, Bytes, BytesN, Env, Vec, contractclient, contracterror, contractevent, contracttype,
 };
 
-use super::CompressedSecpPubKey;
 use super::verification::VerifyError;
 use super::warpdrive::WarpDriveInterface;
+use super::{CompressedSecpPubKey, Ed25519PubKey};
 
 // ── Error ────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ pub enum HandlerError {
     OtherInvocationError = 505,
 
     // Some numbers intentionally skipped...
-    // Mapped from VerifyError (use same enum values from their space
+    // Mapped from VerifyError (use same enum values from their space)
     InvalidSignature = 301,
     SignerNotRegistered = 302,
     InsufficientWeight = 303,
@@ -46,7 +46,7 @@ impl From<VerifyError> for HandlerError {
     }
 }
 
-// ── Types ────────────────────────────────────────────────────────────
+// ── Secp256k1 types ─────────────────────────────────────────────────
 
 #[contracttype]
 pub struct SignatureData {
@@ -54,6 +54,17 @@ pub struct SignatureData {
     pub signatures: Vec<BytesN<65>>,
     pub reference_block: u32,
 }
+
+// ── Ed25519 types ───────────────────────────────────────────────────
+
+#[contracttype]
+pub struct Ed25519SignatureData {
+    pub signers: Vec<Ed25519PubKey>,
+    pub signatures: Vec<BytesN<64>>,
+    pub reference_block: u32,
+}
+
+// ── Shared types ────────────────────────────────────────────────────
 
 #[contracttype]
 pub struct XlmEnvelope {
@@ -76,20 +87,29 @@ impl Verified {
     }
 }
 
-// ── Interface trait (compile-time contract conformance) ──────────────
+// ── Interface traits (compile-time contract conformance) ────────────
 
-#[contractclient(name = "HandlerClient")]
-pub trait HandlerInterface: WarpDriveInterface {
+#[contractclient(name = "EthereumHandlerClient")]
+pub trait EthereumHandlerInterface: WarpDriveInterface {
     // State Changing Operations (if verification succeeds)
     fn verify_eth(
         env: Env,
         envelope_bytes: Bytes,
         sig_data: SignatureData,
     ) -> Result<(), HandlerError>;
+
+    // Queries
+    fn verification_contract(env: Env) -> Address;
+    fn payload(env: Env, event_id: BytesN<20>) -> Option<Bytes>;
+}
+
+#[contractclient(name = "StellarHandlerClient")]
+pub trait StellarHandlerInterface: WarpDriveInterface {
+    // State Changing Operations (if verification succeeds)
     fn verify_xlm(
         env: Env,
         envelope_bytes: Bytes,
-        sig_data: SignatureData,
+        sig_data: Ed25519SignatureData,
     ) -> Result<(), HandlerError>;
 
     // Queries
