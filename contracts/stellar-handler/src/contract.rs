@@ -46,8 +46,9 @@ pub struct StellarHandler;
 impl StellarHandler {
     pub fn __constructor(env: Env, admin: Address, verification_contract: Address) {
         storage::set_admin(&env, &admin);
-        storage::set_version(&env, &String::from_str(&env, "0.0.1"));
+        storage::set_version(&env, &String::from_str(&env, env!("CARGO_PKG_VERSION")));
         storage::set_verification_contract(&env, &verification_contract);
+        storage::extend_instance_ttl(&env);
     }
 }
 
@@ -58,6 +59,7 @@ impl WarpDriveInterface for StellarHandler {
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
+        storage::extend_instance_ttl(&env);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         ContractUpgraded::new(new_version).publish(&env);
     }

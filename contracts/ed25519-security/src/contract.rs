@@ -32,7 +32,7 @@ impl Ed25519Security {
             return Err(SecurityError::NumeratorExceedsDenominator);
         }
         storage::set_admin(&env, &admin);
-        storage::set_version(&env, &String::from_str(&env, "0.0.1"));
+        storage::set_version(&env, &String::from_str(&env, env!("CARGO_PKG_VERSION")));
         storage::set_threshold(
             &env,
             &Threshold::new(threshold_numerator, threshold_denominator),

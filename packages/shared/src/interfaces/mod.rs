@@ -16,5 +16,5 @@ pub type SecpSignature = BytesN<65>;
 /// ed25519 public key
 pub type Ed25519PubKey = BytesN<32>;
 
-/// ed25519 public key
+/// ed25519 signature
 pub type Ed25519Signature = BytesN<64>;

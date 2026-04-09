@@ -160,13 +160,46 @@ fn test_verify_different_events_succeed() {
 
     assert_eq!(client.try_verify_xlm(&env1, &sig1), Ok(Ok(())));
     assert_eq!(
+        client.payload(&expected_event_id(&env, 1)),
+        Some(expected_payload(&env, 1))
+    );
+
+    assert_eq!(
         client.try_verify_xlm(&env1, &sig1),
         Err(Ok(HandlerError::EventAlreadySeen))
     );
     assert_eq!(client.try_verify_xlm(&env2, &sig2), Ok(Ok(())));
+    assert_eq!(
+        client.payload(&expected_event_id(&env, 2)),
+        Some(expected_payload(&env, 2))
+    );
 }
 
 // ── Verification errors propagate ───────────────────────────────────
+
+#[test]
+fn test_verify_invalid_signature_fails() {
+    let env = Env::default();
+    let (client, _key1, _pk1, _key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_xlm(&env, 1);
+
+    let mut signers: Vec<Ed25519PubKey> = Vec::new(&env);
+    signers.push_back(pk2);
+    let mut signatures: Vec<BytesN<64>> = Vec::new(&env);
+    signatures.push_back(BytesN::from_array(&env, &[0xAA; 64]));
+
+    let sig_data = Ed25519SignatureData {
+        signers,
+        signatures,
+        reference_block: TEST_REF_BLOCK,
+    };
+
+    // Non-zero invalid ed25519 signature causes a host error (not a typed HandlerError)
+    assert!(client.try_verify_xlm(&envelope, &sig_data).is_err());
+
+    assert_eq!(client.payload(&expected_event_id(&env, 1)), None);
+}
 
 #[test]
 fn test_verify_insufficient_weight_fails() {
