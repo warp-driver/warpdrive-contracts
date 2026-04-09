@@ -24,7 +24,7 @@ fn benchmark_max_signatures() {
     );
     std::println!("{:-<60}", "");
 
-    for n in [1u32, 2, 3, 5, 8, 10, 20, 40] {
+    for n in [1u32, 2, 3, 5, 8, 10, 20, 40, 60, 80, 100, 120, 140, 160] {
         // Fresh deploy per iteration to avoid accumulated signers
         let admin = Address::generate(&env);
         env.ledger().set_sequence_number(TEST_REF_BLOCK);
@@ -55,17 +55,21 @@ fn benchmark_max_signatures() {
         // Sign with all N signers, sorted by pubkey
         let sig_data = make_sig_data(&env, &envelope_raw, &keys);
 
-        // Reset to default budget limits, then measure
-        env.cost_estimate().budget().reset_default();
+        // Remove budget limits so we can measure actual cost without panics
+        env.cost_estimate().budget().reset_unlimited();
         let result = client.try_verify_eth(&envelope, &sig_data);
         let cpu = env.cost_estimate().budget().cpu_instruction_cost();
         let mem = env.cost_estimate().budget().memory_bytes_cost();
 
-        let status = if result.is_ok() { "OK" } else { "EXCEEDED" };
+        let status = match result.is_ok() {
+            true if cpu <= 400_000_000 => "OK",
+            true => "OVER LIMIT",
+            false => "ERROR",
+        };
         std::println!("{n:>4}  {cpu:>14}  {mem:>12}  {status}");
     }
 
     std::println!("{:-<60}", "");
-    std::println!("Mainnet limit: 100,000,000 CPU instructions");
+    std::println!("Mainnet limit: 400,000,000 CPU instructions (tx_max_instructions)");
     std::println!("{:-<60}\n", "");
 }
