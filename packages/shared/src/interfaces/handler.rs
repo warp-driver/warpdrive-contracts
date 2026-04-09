@@ -2,7 +2,6 @@ use soroban_sdk::{
     Address, Bytes, BytesN, Env, Vec, contractclient, contracterror, contractevent, contracttype,
 };
 
-use super::PubKey;
 use super::verification::VerifyError;
 use super::warpdrive::WarpDriveInterface;
 
@@ -50,7 +49,7 @@ impl From<VerifyError> for HandlerError {
 
 #[contracttype]
 pub struct SignatureData {
-    pub signers: Vec<PubKey>,
+    pub signers: Vec<BytesN<33>>,
     pub signatures: Vec<BytesN<65>>,
     pub reference_block: u32,
 }

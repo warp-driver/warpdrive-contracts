@@ -1,6 +1,5 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, Vec, contractclient, contracterror};
 
-use super::PubKey;
 use super::warpdrive::WarpDriveInterface;
 
 // ── Error ────────────────────────────────────────────────────────────
@@ -26,19 +25,19 @@ pub trait VerificationInterface: WarpDriveInterface {
     // Queries
     fn security_contract(env: Env) -> Address;
     fn required_weight(env: Env) -> u64;
-    fn signer_weight(env: Env, signer_pubkey: PubKey) -> u64;
+    fn signer_weight(env: Env, signer_pubkey: BytesN<33>) -> u64;
     fn check_one(
         env: Env,
         envelope: Bytes,
         signature: BytesN<65>,
-        signer_pubkey: PubKey,
+        signer_pubkey: BytesN<33>,
         reference_block: Option<u32>,
     ) -> Result<u64, VerifyError>;
     fn verify(
         env: Env,
         envelope: Bytes,
         signatures: Vec<BytesN<65>>,
-        signer_pubkeys: Vec<PubKey>,
+        signer_pubkeys: Vec<BytesN<33>>,
         reference_block: u32,
     ) -> Result<(), VerifyError>;
 }
