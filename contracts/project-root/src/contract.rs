@@ -21,7 +21,7 @@ impl ProjectRoot {
         verification_type: VerificationType,
     ) {
         storage::set_admin(&env, &admin);
-        storage::set_version(&env, &String::from_str(&env, "0.0.1"));
+        storage::set_version(&env, &String::from_str(&env, env!("CARGO_PKG_VERSION")));
         storage::set_security_contract(&env, &security_contract);
         storage::set_verification_contract(&env, &verification_contract);
         storage::set_project_spec_repo(&env, &project_spec_repo);

@@ -17,7 +17,7 @@ pub struct Secp256k1Verification;
 impl Secp256k1Verification {
     pub fn __constructor(env: Env, admin: Address, security_contract: Address) {
         storage::set_admin(&env, &admin);
-        storage::set_version(&env, &String::from_str(&env, "0.0.1"));
+        storage::set_version(&env, &String::from_str(&env, env!("CARGO_PKG_VERSION")));
         storage::set_security_contract(&env, &security_contract);
         storage::extend_instance_ttl(&env);
     }
