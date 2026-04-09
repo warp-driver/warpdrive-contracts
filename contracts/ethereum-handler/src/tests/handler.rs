@@ -14,11 +14,11 @@ use warpdrive_shared::testutils::{
 };
 
 /// Reference block used by default in tests — signers are registered at this ledger.
-const TEST_REF_BLOCK: u32 = 10;
+pub(super) const TEST_REF_BLOCK: u32 = 10;
 /// Current ledger sequence in tests — must be > TEST_REF_BLOCK.
-const TEST_CURRENT_LEDGER: u32 = 100;
+pub(super) const TEST_CURRENT_LEDGER: u32 = 100;
 
-fn make_envelope_bytes_eth(env: &Env, event_id_seed: u8) -> Bytes {
+pub(super) fn make_envelope_bytes_eth(env: &Env, event_id_seed: u8) -> Bytes {
     let mut event_id = [0u8; 20];
     event_id[0] = event_id_seed;
 
@@ -81,7 +81,7 @@ fn setup_handler_with_signers(
 }
 
 /// Build a SignatureData with signers ordered by ascending pubkey bytes.
-fn make_sig_data(
+pub(super) fn make_sig_data(
     env: &Env,
     envelope_raw: &[u8],
     keys_and_pubs: &[(SecpSigningKey, CompressedSecpPubKey)],
