@@ -36,6 +36,7 @@ impl Security {
             &env,
             &Threshold::new(threshold_numerator, threshold_denominator),
         );
+        storage::extend_instance_ttl(&env);
         Ok(())
     }
 }
@@ -46,6 +47,7 @@ impl WarpDriveInterface for Security {
         storage::get_admin(&env).require_auth();
 
         storage::set_version(&env, &new_version);
+        storage::extend_instance_ttl(&env);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         ContractUpgraded::new(new_version).publish(&env);
     }
@@ -79,6 +81,7 @@ impl SecurityInterface for Security {
         if weight == 0 {
             return Err(SecurityError::ZeroWeight);
         }
+        storage::extend_instance_ttl(&env);
         storage::add_signer(&env, key.clone(), weight);
         SignerAdded::new(key, weight).publish(&env);
         Ok(())
@@ -86,6 +89,7 @@ impl SecurityInterface for Security {
 
     fn remove_signer(env: Env, key: PubKey) {
         storage::get_admin(&env).require_auth();
+        storage::extend_instance_ttl(&env);
         storage::remove_signer(&env, key.clone());
         SignerRemoved::new(key).publish(&env);
     }

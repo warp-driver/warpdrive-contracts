@@ -1,4 +1,5 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, String, contracttype};
+use warpdrive_shared::ttl;
 
 #[contracttype]
 pub enum DataKey {
@@ -39,24 +40,55 @@ pub fn set_verification_contract(env: &Env, address: &Address) {
         .set(&DataKey::VerificationContract, address);
 }
 
-pub fn is_event_seen(env: &Env, event_id: &BytesN<20>) -> bool {
+pub fn extend_instance_ttl(env: &Env) {
     env.storage()
-        .persistent()
-        .has(&DataKey::EventSeen(event_id.clone()))
+        .instance()
+        .extend_ttl(ttl::INSTANCE_RENEWAL_THRESHOLD, ttl::INSTANCE_TARGET_TTL);
+}
+
+pub fn is_event_seen(env: &Env, event_id: &BytesN<20>) -> bool {
+    let key = DataKey::EventSeen(event_id.clone());
+    if env.storage().persistent().has(&key) {
+        env.storage().persistent().extend_ttl(
+            &key,
+            ttl::PERSISTENT_RENEWAL_THRESHOLD,
+            ttl::PERSISTENT_TARGET_TTL,
+        );
+        true
+    } else {
+        false
+    }
 }
 
 pub fn mark_event_seen(env: &Env, event_id: &BytesN<20>) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::EventSeen(event_id.clone()), &true);
+    let key = DataKey::EventSeen(event_id.clone());
+    env.storage().persistent().set(&key, &true);
+    env.storage().persistent().extend_ttl(
+        &key,
+        ttl::PERSISTENT_RENEWAL_THRESHOLD,
+        ttl::PERSISTENT_TARGET_TTL,
+    );
 }
 
 pub fn save_payload(env: &Env, event_id: BytesN<20>, payload: Bytes) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::Payload(event_id), &payload);
+    let key = DataKey::Payload(event_id);
+    env.storage().persistent().set(&key, &payload);
+    env.storage().persistent().extend_ttl(
+        &key,
+        ttl::PERSISTENT_RENEWAL_THRESHOLD,
+        ttl::PERSISTENT_TARGET_TTL,
+    );
 }
 
 pub fn get_payload(env: &Env, event_id: BytesN<20>) -> Option<Bytes> {
-    env.storage().persistent().get(&DataKey::Payload(event_id))
+    let key = DataKey::Payload(event_id);
+    let result = env.storage().persistent().get(&key);
+    if result.is_some() {
+        env.storage().persistent().extend_ttl(
+            &key,
+            ttl::PERSISTENT_RENEWAL_THRESHOLD,
+            ttl::PERSISTENT_TARGET_TTL,
+        );
+    }
+    result
 }

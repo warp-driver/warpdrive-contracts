@@ -49,6 +49,7 @@ impl Handler {
         storage::set_admin(&env, &admin);
         storage::set_version(&env, &String::from_str(&env, "0.0.1"));
         storage::set_verification_contract(&env, &verification_contract);
+        storage::extend_instance_ttl(&env);
     }
 }
 
@@ -59,6 +60,7 @@ impl WarpDriveInterface for Handler {
         admin.require_auth();
 
         storage::set_version(&env, &new_version);
+        storage::extend_instance_ttl(&env);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         ContractUpgraded::new(new_version).publish(&env);
     }
@@ -104,6 +106,7 @@ impl HandlerInterface for Handler {
         envelope_bytes: Bytes,
         sig_data: SignatureData,
     ) -> Result<(), HandlerError> {
+        storage::extend_instance_ttl(&env);
         validate_reference_block(&env, sig_data.reference_block)?;
 
         // Parse the ABI-encoded envelope
@@ -148,6 +151,7 @@ impl HandlerInterface for Handler {
         envelope_bytes: Bytes,
         sig_data: SignatureData,
     ) -> Result<(), HandlerError> {
+        storage::extend_instance_ttl(&env);
         validate_reference_block(&env, sig_data.reference_block)?;
 
         // Parse XDR bytes into the typed envelope
