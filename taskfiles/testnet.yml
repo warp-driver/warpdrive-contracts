@@ -6,6 +6,7 @@ vars:
   STATE_DIR: .testnet
   WASM_DIR: target/wasm32v1-none/release
   FEE: "10000000"
+  MAX_RETRIES: "3"
 
 tasks:
   fund:
@@ -27,12 +28,25 @@ tasks:
       - task: :optimize
       - mkdir -p {{.STATE_DIR}}
       - |
+        retry() {
+          local attempt=1
+          while [ $attempt -le {{.MAX_RETRIES}} ]; do
+            if "$@"; then
+              return 0
+            fi
+            echo "  Attempt $attempt/{{.MAX_RETRIES}} failed, retrying in 5s..." >&2
+            sleep 5
+            attempt=$((attempt + 1))
+          done
+          return 1
+        }
+
         ADMIN=$(stellar keys address {{.SOURCE}})
         echo "Deploying as admin: $ADMIN"
 
         echo ""
         echo "=== Deploying security ==="
-        SECURITY_ID=$(stellar contract deploy \
+        SECURITY_ID=$(retry stellar contract deploy \
           --wasm {{.WASM_DIR}}/warpdrive_security.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
@@ -47,7 +61,7 @@ tasks:
 
         echo ""
         echo "=== Deploying verification ==="
-        VERIFICATION_ID=$(stellar contract deploy \
+        VERIFICATION_ID=$(retry stellar contract deploy \
           --wasm {{.WASM_DIR}}/warpdrive_verification.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
@@ -61,7 +75,7 @@ tasks:
 
         echo ""
         echo "=== Deploying handler ==="
-        HANDLER_ID=$(stellar contract deploy \
+        HANDLER_ID=$(retry stellar contract deploy \
           --wasm {{.WASM_DIR}}/warpdrive_handler.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
@@ -75,7 +89,7 @@ tasks:
 
         echo ""
         echo "=== Deploying project-root ==="
-        PROJECT_ROOT_ID=$(stellar contract deploy \
+        PROJECT_ROOT_ID=$(retry stellar contract deploy \
           --wasm {{.WASM_DIR}}/warpdrive_project_root.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
@@ -96,6 +110,19 @@ tasks:
     desc: Register 3 test signers on the security contract
     cmds:
       - |
+        retry() {
+          local attempt=1
+          while [ $attempt -le {{.MAX_RETRIES}} ]; do
+            if "$@"; then
+              return 0
+            fi
+            echo "  Attempt $attempt/{{.MAX_RETRIES}} failed, retrying in 5s..." >&2
+            sleep 5
+            attempt=$((attempt + 1))
+          done
+          return 1
+        }
+
         SECURITY_ID=$(cat {{.STATE_DIR}}/security.id)
         echo "Security contract: $SECURITY_ID"
 
@@ -103,7 +130,7 @@ tasks:
         eval "$(cargo run -p test-vectors 2>/dev/null)"
 
         echo "Registering signer 1 (weight 100): $SIGNER1_PUBKEY"
-        stellar contract invoke \
+        retry stellar contract invoke \
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
@@ -114,7 +141,7 @@ tasks:
           --weight 100
 
         echo "Registering signer 2 (weight 200): $SIGNER2_PUBKEY"
-        stellar contract invoke \
+        retry stellar contract invoke \
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
@@ -125,7 +152,7 @@ tasks:
           --weight 200
 
         echo "Registering signer 3 (weight 50): $SIGNER3_PUBKEY"
-        stellar contract invoke \
+        retry stellar contract invoke \
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
@@ -146,8 +173,9 @@ tasks:
           -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger"}' \
           | grep -o '"sequence":[0-9]*' | grep -o '[0-9]*')
         echo "$REF_BLOCK" > {{.STATE_DIR}}/ref_block
-        echo ""
-        echo "Signers registered at ledger: $REF_BLOCK"
+        echo "Signers registered. Reference block: $REF_BLOCK"
+        echo "Waiting for ledger to advance..."
+        sleep 10
         echo "Total weight: 350, required (2/3): 233"
 
   setup:
@@ -165,7 +193,6 @@ tasks:
 
         eval "$(cargo run -p test-vectors 2>/dev/null)"
 
-        # Get a recent ledger sequence for reference_block (current - 5 to be safely in the past)
         REF_BLOCK=$(cat {{.STATE_DIR}}/ref_block)
         echo "Using reference_block: $REF_BLOCK"
 
@@ -273,11 +300,23 @@ tasks:
         SECURITY_ID=$(cat {{.STATE_DIR}}/security.id)
         eval "$(cargo run -p test-vectors 2>/dev/null)"
 
+        retry() {
+          local attempt=1
+          while [ $attempt -le {{.MAX_RETRIES}} ]; do
+            if "$@"; then
+              return 0
+            fi
+            echo "  Attempt $attempt/{{.MAX_RETRIES}} failed, retrying in 5s..." >&2
+            sleep 5
+            attempt=$((attempt + 1))
+          done
+          return 1
+        }
+
         echo "Re-registering signers to refresh checkpoints..."
-        # Re-adding with same weight updates the checkpoint to current ledger
-        stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER1_PUBKEY --weight 100
-        stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER2_PUBKEY --weight 200
-        stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER3_PUBKEY --weight 50
+        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER1_PUBKEY --weight 100
+        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER2_PUBKEY --weight 200
+        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER3_PUBKEY --weight 50
 
         RPC_URL="https://soroban-testnet.stellar.org"
         REF_BLOCK=$(curl -s -X POST "$RPC_URL" \
