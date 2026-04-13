@@ -1,6 +1,6 @@
 extern crate std;
 
-use crate::storage::CompressedSecpPubKey;
+use warpdrive_shared::interfaces::CompressedSecpPubKey;
 
 use super::setup::deploy_contract;
 use soroban_sdk::{

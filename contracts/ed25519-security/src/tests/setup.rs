@@ -2,8 +2,6 @@ use crate::{Ed25519Security, Ed25519SecurityClient};
 use soroban_sdk::{Address, BytesN, Env, testutils::Address as _};
 
 mod contract_wasm {
-    use warpdrive_shared::interfaces::{CompressedSecpPubKey, Ed25519PubKey};
-
     soroban_sdk::contractimport!(
         file = "../../target/wasm32v1-none/release/warpdrive_ed25519_security.wasm"
     );

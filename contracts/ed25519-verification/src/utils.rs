@@ -1,8 +1,6 @@
 use soroban_sdk::{Bytes, BytesN, Env};
 use warpdrive_shared::interfaces::verification::VerifyError;
 
-pub use warpdrive_shared::interfaces::Ed25519PubKey;
-
 /// SEP-0053 message hash: `SHA256("Stellar Signed Message:\n" || envelope)`
 pub fn sep053_hash(env: &Env, envelope: &Bytes) -> BytesN<32> {
     let mut payload = Bytes::new(env);
@@ -26,7 +24,7 @@ pub fn verify_ed25519(
     env: &Env,
     envelope: &Bytes,
     signature: &BytesN<64>,
-    signer_pubkey: &Ed25519PubKey,
+    signer_pubkey: &BytesN<32>,
 ) -> Result<(), VerifyError> {
     // Reject all-zero signatures explicitly
     if signature.to_array().iter().all(|&b| b == 0) {
@@ -49,7 +47,7 @@ pub fn verify_ed25519_prehashed(
     env: &Env,
     message_hash: &BytesN<32>,
     signature: &BytesN<64>,
-    signer_pubkey: &Ed25519PubKey,
+    signer_pubkey: &BytesN<32>,
 ) -> Result<(), VerifyError> {
     // Reject all-zero signatures explicitly
     if signature.to_array().iter().all(|&b| b == 0) {

@@ -4,7 +4,6 @@ use soroban_sdk::{
 
 use super::verification::VerifyError;
 use super::warpdrive::WarpDriveInterface;
-use super::{CompressedSecpPubKey, Ed25519PubKey};
 
 // ── Error ────────────────────────────────────────────────────────────
 
@@ -50,7 +49,7 @@ impl From<VerifyError> for HandlerError {
 
 #[contracttype]
 pub struct SignatureData {
-    pub signers: Vec<CompressedSecpPubKey>,
+    pub signers: Vec<BytesN<33>>,
     pub signatures: Vec<BytesN<65>>,
     pub reference_block: u32,
 }
@@ -59,7 +58,7 @@ pub struct SignatureData {
 
 #[contracttype]
 pub struct Ed25519SignatureData {
-    pub signers: Vec<Ed25519PubKey>,
+    pub signers: Vec<BytesN<32>>,
     pub signatures: Vec<BytesN<64>>,
     pub reference_block: u32,
 }

@@ -5,7 +5,7 @@ vars:
   SOURCE: warpdrive-test
   STATE_DIR: .testnet
   WASM_DIR: target/wasm32v1-none/release
-  FEE: "10000000"
+  INCLUSION_FEE: "10000000"
   MAX_RETRIES: "3"
 
 tasks:
@@ -45,13 +45,13 @@ tasks:
         echo "Deploying as admin: $ADMIN"
 
         echo ""
-        echo "=== Deploying security ==="
+        echo "=== Deploying secp256k1-security ==="
         SECURITY_ID=$(retry stellar contract deploy \
-          --wasm {{.WASM_DIR}}/warpdrive_security.optimized.wasm \
+          --wasm {{.WASM_DIR}}/warpdrive_secp256k1_security.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
-          --alias warpdrive-security \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          --alias warpdrive-secp256k1-security \
           -- \
           --admin $ADMIN \
           --threshold_numerator 2 \
@@ -60,13 +60,13 @@ tasks:
         echo "Security: $SECURITY_ID"
 
         echo ""
-        echo "=== Deploying verification ==="
+        echo "=== Deploying secp256k1-verification ==="
         VERIFICATION_ID=$(retry stellar contract deploy \
-          --wasm {{.WASM_DIR}}/warpdrive_verification.optimized.wasm \
+          --wasm {{.WASM_DIR}}/warpdrive_secp256k1_verification.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
-          --alias warpdrive-verification \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          --alias warpdrive-secp256k1-verification \
           -- \
           --admin $ADMIN \
           --security_contract $SECURITY_ID)
@@ -74,13 +74,13 @@ tasks:
         echo "Verification: $VERIFICATION_ID"
 
         echo ""
-        echo "=== Deploying handler ==="
+        echo "=== Deploying ethereum-handler ==="
         HANDLER_ID=$(retry stellar contract deploy \
-          --wasm {{.WASM_DIR}}/warpdrive_handler.optimized.wasm \
+          --wasm {{.WASM_DIR}}/warpdrive_ethereum_handler.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
-          --alias warpdrive-handler \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          --alias warpdrive-ethereum-handler \
           -- \
           --admin $ADMIN \
           --verification_contract $VERIFICATION_ID)
@@ -93,13 +93,14 @@ tasks:
           --wasm {{.WASM_DIR}}/warpdrive_project_root.optimized.wasm \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
           --alias warpdrive-project-root \
           -- \
           --admin $ADMIN \
           --security_contract $SECURITY_ID \
           --verification_contract $VERIFICATION_ID \
-          --project_spec_repo "https://github.com/warp-driver/warpdrive-contracts")
+          --project_spec_repo "https://github.com/warp-driver/warpdrive-contracts" \
+          --verification_type 1) # VerificationType::Ethereum (CLI doesn't support enum names)
         echo "$PROJECT_ROOT_ID" > {{.STATE_DIR}}/project-root.id
         echo "Project Root: $PROJECT_ROOT_ID"
 
@@ -134,7 +135,7 @@ tasks:
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
           -- \
           add_signer \
           --key $SIGNER1_PUBKEY \
@@ -145,7 +146,7 @@ tasks:
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
           -- \
           add_signer \
           --key $SIGNER2_PUBKEY \
@@ -156,14 +157,13 @@ tasks:
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
           -- \
           add_signer \
           --key $SIGNER3_PUBKEY \
           --weight 50
 
-        # Query current ledger sequence via RPC — this is the block where signers are registered
-        # The checkpoint for signer weights is recorded at this ledger
+        # Query current ledger sequence via RPC
         RPC_URL=$(stellar network container info {{.NETWORK}} 2>/dev/null | grep rpc || echo "")
         if [ -z "$RPC_URL" ]; then
           RPC_URL="https://soroban-testnet.stellar.org"
@@ -201,7 +201,7 @@ tasks:
           --id $HANDLER_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
           -- \
           verify_eth \
           --envelope_bytes $ENVELOPE1 \
@@ -246,7 +246,7 @@ tasks:
           --id $HANDLER_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
           -- \
           verify_eth \
           --envelope_bytes $ENVELOPE2 \
@@ -278,7 +278,7 @@ tasks:
           --id $HANDLER_ID \
           --source {{.SOURCE}} \
           --network {{.NETWORK}} \
-          --fee {{.FEE}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
           -- \
           verify_eth \
           --envelope_bytes $ENVELOPE3 \
@@ -314,9 +314,9 @@ tasks:
         }
 
         echo "Re-registering signers to refresh checkpoints..."
-        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER1_PUBKEY --weight 100
-        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER2_PUBKEY --weight 200
-        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --fee {{.FEE}} -- add_signer --key $SIGNER3_PUBKEY --weight 50
+        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $SIGNER1_PUBKEY --weight 100
+        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $SIGNER2_PUBKEY --weight 200
+        retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $SIGNER3_PUBKEY --weight 50
 
         RPC_URL="https://soroban-testnet.stellar.org"
         REF_BLOCK=$(curl -s -X POST "$RPC_URL" \

@@ -1,11 +1,10 @@
 extern crate alloc;
 
 use alloc::vec::Vec as StdVec;
-use soroban_sdk::{Address, Env, String, Vec, contracttype};
+use soroban_sdk::{Address, BytesN, Env, String, Vec, contracttype};
 use warpdrive_shared::ttl;
 use warpdrive_shared::vec_history::{self, Entry, VecHistoryStore};
 
-pub use warpdrive_shared::interfaces::CompressedSecpPubKey;
 pub use warpdrive_shared::interfaces::security::SignerInfo;
 
 const HISTORY_CUTOFF: u32 = 200;
@@ -42,7 +41,7 @@ pub enum DataKey {
     // These can grow quite large, all in persistent storage
     AllSigners,
     // Vec-based history (one key per timeline)
-    SignerWeightHist(CompressedSecpPubKey),
+    SignerWeightHist(BytesN<33>),
     TotalWeightHist,
 }
 
@@ -86,7 +85,7 @@ pub fn get_total_weight(env: &Env) -> u64 {
 
 // ── Signer management ───────────────────────────────────────────────
 
-pub fn add_signer(env: &Env, key: CompressedSecpPubKey, weight: u64) {
+pub fn add_signer(env: &Env, key: BytesN<33>, weight: u64) {
     let mut total = get_total_weight(env);
 
     // If updating an existing signer, subtract the old weight first
@@ -104,7 +103,7 @@ pub fn add_signer(env: &Env, key: CompressedSecpPubKey, weight: u64) {
     vec_history::push(&TotalWeightHistory::new(env), total);
 }
 
-pub fn remove_signer(env: &Env, key: CompressedSecpPubKey) {
+pub fn remove_signer(env: &Env, key: BytesN<33>) {
     if let Some(old_weight) = get_signer_weight(env, key.clone()) {
         let total = get_total_weight(env);
         let new_total = total - old_weight;
@@ -115,18 +114,18 @@ pub fn remove_signer(env: &Env, key: CompressedSecpPubKey) {
     }
 }
 
-pub fn get_signer_weight(env: &Env, key: CompressedSecpPubKey) -> Option<u64> {
+pub fn get_signer_weight(env: &Env, key: BytesN<33>) -> Option<u64> {
     let weight = vec_history::latest(&SignerWeightHistory::new(env, key));
     if weight == 0 { None } else { Some(weight) }
 }
 
 // ── Historical lookups ──────────────────────────────────────────────
 
-pub fn get_signer_weight_at(env: &Env, key: CompressedSecpPubKey, reference_block: u32) -> u64 {
+pub fn get_signer_weight_at(env: &Env, key: BytesN<33>, reference_block: u32) -> u64 {
     vec_history::lookup_at(&SignerWeightHistory::new(env, key), reference_block)
 }
 
-pub fn get_signer_weights(env: &Env, keys: &Vec<CompressedSecpPubKey>) -> Vec<u64> {
+pub fn get_signer_weights(env: &Env, keys: &Vec<BytesN<33>>) -> Vec<u64> {
     let mut result = Vec::new(env);
     for i in 0..keys.len() {
         let key = keys.get(i).unwrap();
@@ -135,11 +134,7 @@ pub fn get_signer_weights(env: &Env, keys: &Vec<CompressedSecpPubKey>) -> Vec<u6
     result
 }
 
-pub fn get_signer_weights_at(
-    env: &Env,
-    keys: &Vec<CompressedSecpPubKey>,
-    reference_block: u32,
-) -> Vec<u64> {
+pub fn get_signer_weights_at(env: &Env, keys: &Vec<BytesN<33>>, reference_block: u32) -> Vec<u64> {
     let mut result = Vec::new(env);
     for i in 0..keys.len() {
         let key = keys.get(i).unwrap();
@@ -165,7 +160,7 @@ pub fn list_signers(env: &Env) -> Vec<SignerInfo> {
     result
 }
 
-fn all_signers(env: &Env) -> Vec<CompressedSecpPubKey> {
+fn all_signers(env: &Env) -> Vec<BytesN<33>> {
     let key = DataKey::AllSigners;
     let result = env
         .storage()
@@ -182,7 +177,7 @@ fn all_signers(env: &Env) -> Vec<CompressedSecpPubKey> {
     result
 }
 
-fn set_all_signers(env: &Env, signers: &Vec<CompressedSecpPubKey>) {
+fn set_all_signers(env: &Env, signers: &Vec<BytesN<33>>) {
     let key = DataKey::AllSigners;
     env.storage().persistent().set(&key, signers);
     env.storage().persistent().extend_ttl(
@@ -192,7 +187,7 @@ fn set_all_signers(env: &Env, signers: &Vec<CompressedSecpPubKey>) {
     );
 }
 
-fn insert_all_signers(env: &Env, key: CompressedSecpPubKey) {
+fn insert_all_signers(env: &Env, key: BytesN<33>) {
     let mut signers = all_signers(env);
     let len = signers.len();
     let mut idx = len;
@@ -211,7 +206,7 @@ fn insert_all_signers(env: &Env, key: CompressedSecpPubKey) {
     set_all_signers(env, &signers);
 }
 
-fn remove_all_signers(env: &Env, key: CompressedSecpPubKey) {
+fn remove_all_signers(env: &Env, key: BytesN<33>) {
     let mut signers = all_signers(env);
     for i in 0..signers.len() {
         let existing = signers.get(i).unwrap();
@@ -270,11 +265,11 @@ fn save_history(env: &Env, key: &DataKey, entries: StdVec<Entry<u64>>) {
 
 pub struct SignerWeightHistory<'a> {
     env: &'a Env,
-    key: CompressedSecpPubKey,
+    key: BytesN<33>,
 }
 
 impl<'a> SignerWeightHistory<'a> {
-    pub fn new(env: &'a Env, key: CompressedSecpPubKey) -> Self {
+    pub fn new(env: &'a Env, key: BytesN<33>) -> Self {
         Self { env, key }
     }
 }

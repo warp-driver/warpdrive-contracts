@@ -1,7 +1,6 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contractimpl};
 
 use warpdrive_shared::interfaces::{
-    CompressedSecpPubKey,
     security::Secp256k1SecurityClient,
     verification::{Secp256k1VerificationInterface, VerifyError},
     warpdrive::{ContractUpgraded, WarpDriveInterface},
@@ -68,7 +67,7 @@ impl Secp256k1VerificationInterface for Secp256k1Verification {
         Secp256k1SecurityClient::new(&env, &security_addr).required_weight()
     }
 
-    fn signer_weight(env: Env, signer_pubkey: CompressedSecpPubKey) -> u64 {
+    fn signer_weight(env: Env, signer_pubkey: BytesN<33>) -> u64 {
         let security_addr = storage::get_security_contract(&env);
         Secp256k1SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
     }
@@ -77,7 +76,7 @@ impl Secp256k1VerificationInterface for Secp256k1Verification {
         env: Env,
         envelope: Bytes,
         signature: BytesN<65>,
-        signer_pubkey: CompressedSecpPubKey,
+        signer_pubkey: BytesN<33>,
         reference_block: Option<u32>,
     ) -> Result<u64, VerifyError> {
         if !utils::is_valid_signature(&env, &envelope, &signature, &signer_pubkey) {
@@ -102,7 +101,7 @@ impl Secp256k1VerificationInterface for Secp256k1Verification {
         env: Env,
         envelope: Bytes,
         signatures: Vec<BytesN<65>>,
-        signer_pubkeys: Vec<CompressedSecpPubKey>,
+        signer_pubkeys: Vec<BytesN<33>>,
         reference_block: u32,
     ) -> Result<(), VerifyError> {
         storage::extend_instance_ttl(&env);
@@ -124,7 +123,7 @@ impl Secp256k1VerificationInterface for Secp256k1Verification {
         }
 
         let mut total_weight: u64 = 0;
-        let mut prev_pubkey: Option<CompressedSecpPubKey> = None;
+        let mut prev_pubkey: Option<BytesN<33>> = None;
 
         for i in 0..signatures.len() {
             let sig = signatures.get(i).unwrap();
