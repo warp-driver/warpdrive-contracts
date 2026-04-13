@@ -1,6 +1,8 @@
 use soroban_sdk::{Address, Env, String, contracttype};
 use warpdrive_shared::ttl;
 
+pub use warpdrive_shared::interfaces::project_root::VerificationType;
+
 #[contracttype]
 pub enum DataKey {
     Admin,
@@ -8,6 +10,7 @@ pub enum DataKey {
     SecurityContract,
     VerificationContract,
     ProjectSpecRepo,
+    VerificationType,
 }
 
 pub fn get_admin(env: &Env) -> Address {
@@ -63,6 +66,19 @@ pub fn set_project_spec_repo(env: &Env, repo: &String) {
     env.storage()
         .instance()
         .set(&DataKey::ProjectSpecRepo, repo);
+}
+
+pub fn get_verification_type(env: &Env) -> VerificationType {
+    env.storage()
+        .instance()
+        .get(&DataKey::VerificationType)
+        .unwrap()
+}
+
+pub fn set_verification_type(env: &Env, vtype: &VerificationType) {
+    env.storage()
+        .instance()
+        .set(&DataKey::VerificationType, vtype);
 }
 
 pub fn extend_instance_ttl(env: &Env) {
