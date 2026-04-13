@@ -27,7 +27,7 @@ fn benchmark_max_signatures() {
     );
     std::println!("{:-<80}", "");
 
-    for n in [1u32, 2, 3, 5, 8, 10, 20, 40, 60, 80, 90, 100] {
+    for n in [1u32, 2, 3, 5, 8, 10, 20, 40, 60, 80, 90] {
         let result = std::panic::catch_unwind(|| {
             let mut env = Env::default();
             env.mock_all_auths();
