@@ -11,7 +11,10 @@ fn test_deploy() {
     let (client, admin) = deploy_contract(&env);
 
     assert_eq!(client.admin(), admin);
-    assert_eq!(client.version(), String::from_str(&env, "0.0.1"));
+    assert_eq!(
+        client.version(),
+        String::from_str(&env, env!("CARGO_PKG_VERSION"))
+    );
     assert_eq!(
         client.project_spec_repo(),
         String::from_str(&env, "https://github.com/example/spec")
@@ -28,7 +31,10 @@ fn test_upgrade() {
     env.cost_estimate().budget().reset_unlimited();
 
     let (client, admin) = deploy_contract(&env);
-    assert_eq!(client.version(), String::from_str(&env, "0.0.1"));
+    assert_eq!(
+        client.version(),
+        String::from_str(&env, env!("CARGO_PKG_VERSION"))
+    );
 
     let new_wasm_hash = install_contract_wasm(&env);
     client.upgrade(&new_wasm_hash, &String::from_str(&env, "0.0.2"));
