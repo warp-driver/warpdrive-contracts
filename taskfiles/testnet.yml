@@ -44,6 +44,8 @@ tasks:
         ADMIN=$(stellar keys address {{.SOURCE}})
         echo "Deploying as admin: $ADMIN"
 
+        # ── Ethereum (secp256k1) pipeline ──
+
         echo ""
         echo "=== Deploying secp256k1-security ==="
         SECURITY_ID=$(retry stellar contract deploy \
@@ -84,8 +86,55 @@ tasks:
           -- \
           --admin $ADMIN \
           --verification_contract $VERIFICATION_ID)
-        echo "$HANDLER_ID" > {{.STATE_DIR}}/handler.id
-        echo "Handler: $HANDLER_ID"
+        echo "$HANDLER_ID" > {{.STATE_DIR}}/eth-handler.id
+        echo "Ethereum Handler: $HANDLER_ID"
+
+        # ── Stellar (ed25519) pipeline ──
+
+        echo ""
+        echo "=== Deploying ed25519-security ==="
+        ED_SECURITY_ID=$(retry stellar contract deploy \
+          --wasm {{.WASM_DIR}}/warpdrive_ed25519_security.optimized.wasm \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          --alias warpdrive-ed25519-security \
+          -- \
+          --admin $ADMIN \
+          --threshold_numerator 2 \
+          --threshold_denominator 3)
+        echo "$ED_SECURITY_ID" > {{.STATE_DIR}}/ed-security.id
+        echo "Ed25519 Security: $ED_SECURITY_ID"
+
+        echo ""
+        echo "=== Deploying ed25519-verification ==="
+        ED_VERIFICATION_ID=$(retry stellar contract deploy \
+          --wasm {{.WASM_DIR}}/warpdrive_ed25519_verification.optimized.wasm \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          --alias warpdrive-ed25519-verification \
+          -- \
+          --admin $ADMIN \
+          --security_contract $ED_SECURITY_ID)
+        echo "$ED_VERIFICATION_ID" > {{.STATE_DIR}}/ed-verification.id
+        echo "Ed25519 Verification: $ED_VERIFICATION_ID"
+
+        echo ""
+        echo "=== Deploying stellar-handler ==="
+        XLM_HANDLER_ID=$(retry stellar contract deploy \
+          --wasm {{.WASM_DIR}}/warpdrive_stellar_handler.optimized.wasm \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          --alias warpdrive-stellar-handler \
+          -- \
+          --admin $ADMIN \
+          --verification_contract $ED_VERIFICATION_ID)
+        echo "$XLM_HANDLER_ID" > {{.STATE_DIR}}/xlm-handler.id
+        echo "Stellar Handler: $XLM_HANDLER_ID"
+
+        # ── Project root ──
 
         echo ""
         echo "=== Deploying project-root ==="
@@ -108,7 +157,7 @@ tasks:
         echo "All contracts deployed."
 
   setup-signers:
-    desc: Register 3 test signers on the security contract
+    desc: Register 3 test signers on both security contracts
     cmds:
       - |
         retry() {
@@ -124,13 +173,14 @@ tasks:
           return 1
         }
 
-        SECURITY_ID=$(cat {{.STATE_DIR}}/security.id)
-        echo "Security contract: $SECURITY_ID"
-
-        # Generate test vectors
         eval "$(cargo run -p test-vectors 2>/dev/null)"
 
-        echo "Registering signer 1 (weight 100): $SIGNER1_PUBKEY"
+        # ── Secp256k1 signers ──
+
+        SECURITY_ID=$(cat {{.STATE_DIR}}/security.id)
+        echo "Secp256k1 security: $SECURITY_ID"
+
+        echo "Registering secp signer 1 (weight 100): $SIGNER1_PUBKEY"
         retry stellar contract invoke \
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
@@ -141,7 +191,7 @@ tasks:
           --key $SIGNER1_PUBKEY \
           --weight 100
 
-        echo "Registering signer 2 (weight 200): $SIGNER2_PUBKEY"
+        echo "Registering secp signer 2 (weight 200): $SIGNER2_PUBKEY"
         retry stellar contract invoke \
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
@@ -152,7 +202,7 @@ tasks:
           --key $SIGNER2_PUBKEY \
           --weight 200
 
-        echo "Registering signer 3 (weight 50): $SIGNER3_PUBKEY"
+        echo "Registering secp signer 3 (weight 50): $SIGNER3_PUBKEY"
         retry stellar contract invoke \
           --id $SECURITY_ID \
           --source {{.SOURCE}} \
@@ -163,20 +213,58 @@ tasks:
           --key $SIGNER3_PUBKEY \
           --weight 50
 
-        # Query current ledger sequence via RPC
-        RPC_URL=$(stellar network container info {{.NETWORK}} 2>/dev/null | grep rpc || echo "")
-        if [ -z "$RPC_URL" ]; then
-          RPC_URL="https://soroban-testnet.stellar.org"
-        fi
+        # ── Ed25519 signers ──
+
+        ED_SECURITY_ID=$(cat {{.STATE_DIR}}/ed-security.id)
+        echo ""
+        echo "Ed25519 security: $ED_SECURITY_ID"
+
+        echo "Registering ed25519 signer 1 (weight 100): $ED_SIGNER1_PUBKEY"
+        retry stellar contract invoke \
+          --id $ED_SECURITY_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          -- \
+          add_signer \
+          --key $ED_SIGNER1_PUBKEY \
+          --weight 100
+
+        echo "Registering ed25519 signer 2 (weight 200): $ED_SIGNER2_PUBKEY"
+        retry stellar contract invoke \
+          --id $ED_SECURITY_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          -- \
+          add_signer \
+          --key $ED_SIGNER2_PUBKEY \
+          --weight 200
+
+        echo "Registering ed25519 signer 3 (weight 50): $ED_SIGNER3_PUBKEY"
+        retry stellar contract invoke \
+          --id $ED_SECURITY_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          -- \
+          add_signer \
+          --key $ED_SIGNER3_PUBKEY \
+          --weight 50
+
+        # ── Capture reference block ──
+
+        RPC_URL="https://soroban-testnet.stellar.org"
         REF_BLOCK=$(curl -s -X POST "$RPC_URL" \
           -H "Content-Type: application/json" \
           -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger"}' \
           | grep -o '"sequence":[0-9]*' | grep -o '[0-9]*')
         echo "$REF_BLOCK" > {{.STATE_DIR}}/ref_block
+        echo ""
         echo "Signers registered. Reference block: $REF_BLOCK"
         echo "Waiting for ledger to advance..."
         sleep 10
-        echo "Total weight: 350, required (2/3): 233"
+        echo "Total weight per contract: 350, required (2/3): 233"
 
   setup:
     desc: Full testnet setup (fund + deploy + register signers)
@@ -184,19 +272,18 @@ tasks:
       - task: deploy
       - task: setup-signers
 
-  test-happy:
-    desc: "Test: 2-of-3 signatures with sufficient weight (signer1=100 + signer2=200 = 300 >= 233)"
+  # ── Ethereum (secp256k1) tests ──────────────────────────────────
+
+  eth-test-happy:
+    desc: "ETH: 2-of-3 signatures with sufficient weight"
     cmds:
       - |
-        echo "=== TEST: Happy path (2-of-3 sufficient weight) ==="
-        HANDLER_ID=$(cat {{.STATE_DIR}}/handler.id)
-
+        echo "=== ETH TEST: Happy path (2-of-3 sufficient weight) ==="
+        HANDLER_ID=$(cat {{.STATE_DIR}}/eth-handler.id)
         eval "$(cargo run -p test-vectors 2>/dev/null)"
-
         REF_BLOCK=$(cat {{.STATE_DIR}}/ref_block)
         echo "Using reference_block: $REF_BLOCK"
 
-        # Use envelope 1, sign with signer1 + signer2 (sorted order)
         RESULT=$(stellar contract invoke \
           --id $HANDLER_ID \
           --source {{.SOURCE}} \
@@ -216,7 +303,6 @@ tasks:
           exit 1
         fi
 
-        # Verify payload was stored
         PAYLOAD=$(stellar contract invoke \
           --id $HANDLER_ID \
           --source {{.SOURCE}} \
@@ -227,21 +313,18 @@ tasks:
           --event_id $EVENT_ID1 \
           2>&1)
         echo "Stored payload: $PAYLOAD"
-        echo "PASS: Happy path complete"
+        echo "PASS: ETH happy path complete"
 
-  test-insufficient:
-    desc: "Test: 1-of-3 signature with insufficient weight (signer3=50 < 233)"
+  eth-test-insufficient:
+    desc: "ETH: 1-of-3 signature with insufficient weight"
     cmds:
       - |
-        echo "=== TEST: Insufficient weight (1-of-3) ==="
-        HANDLER_ID=$(cat {{.STATE_DIR}}/handler.id)
-
+        echo "=== ETH TEST: Insufficient weight (1-of-3) ==="
+        HANDLER_ID=$(cat {{.STATE_DIR}}/eth-handler.id)
         eval "$(cargo run -p test-vectors 2>/dev/null)"
-
         REF_BLOCK=$(cat {{.STATE_DIR}}/ref_block)
         echo "Using reference_block: $REF_BLOCK"
 
-        # Use envelope 2, sign with signer3 only (weight 50 < required 233)
         RESULT=$(stellar contract invoke \
           --id $HANDLER_ID \
           --source {{.SOURCE}} \
@@ -255,25 +338,22 @@ tasks:
 
         if [ $STATUS -ne 0 ]; then
           echo "PASS: verify_eth correctly rejected (insufficient weight)"
-          echo "Error: $RESULT"
+          echo "$RESULT"
         else
           echo "FAIL: verify_eth should have failed but succeeded"
           exit 1
         fi
 
-  test-invalid-sig:
-    desc: "Test: Invalid (garbage) signature rejected"
+  eth-test-invalid-sig:
+    desc: "ETH: Invalid (garbage) signature rejected"
     cmds:
       - |
-        echo "=== TEST: Invalid signature ==="
-        HANDLER_ID=$(cat {{.STATE_DIR}}/handler.id)
-
+        echo "=== ETH TEST: Invalid signature ==="
+        HANDLER_ID=$(cat {{.STATE_DIR}}/eth-handler.id)
         eval "$(cargo run -p test-vectors 2>/dev/null)"
-
         REF_BLOCK=$(cat {{.STATE_DIR}}/ref_block)
         echo "Using reference_block: $REF_BLOCK"
 
-        # Use envelope 3, submit garbage signature with valid pubkey
         RESULT=$(stellar contract invoke \
           --id $HANDLER_ID \
           --source {{.SOURCE}} \
@@ -287,17 +367,119 @@ tasks:
 
         if [ $STATUS -ne 0 ]; then
           echo "PASS: verify_eth correctly rejected (invalid signature)"
-          echo "Error: $RESULT"
+          echo "$RESULT"
         else
           echo "FAIL: verify_eth should have failed but succeeded"
           exit 1
         fi
 
+  # ── Stellar (ed25519) tests ─────────────────────────────────────
+
+  xlm-test-happy:
+    desc: "XLM: 2-of-3 signatures with sufficient weight"
+    cmds:
+      - |
+        echo "=== XLM TEST: Happy path (2-of-3 sufficient weight) ==="
+        HANDLER_ID=$(cat {{.STATE_DIR}}/xlm-handler.id)
+        eval "$(cargo run -p test-vectors 2>/dev/null)"
+        REF_BLOCK=$(cat {{.STATE_DIR}}/ref_block)
+        echo "Using reference_block: $REF_BLOCK"
+
+        RESULT=$(stellar contract invoke \
+          --id $HANDLER_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          -- \
+          verify_xlm \
+          --envelope_bytes $XLM_ENVELOPE1 \
+          --sig_data "{\"signers\": [\"$ED_SIGNER1_PUBKEY\", \"$ED_SIGNER2_PUBKEY\"], \"signatures\": [\"$XLM_ENVELOPE1_SIG1\", \"$XLM_ENVELOPE1_SIG2\"], \"reference_block\": $REF_BLOCK}" \
+          2>&1) && STATUS=0 || STATUS=$?
+
+        if [ $STATUS -eq 0 ]; then
+          echo "PASS: verify_xlm succeeded"
+        else
+          echo "FAIL: verify_xlm failed"
+          echo "$RESULT"
+          exit 1
+        fi
+
+        PAYLOAD=$(stellar contract invoke \
+          --id $HANDLER_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --send no \
+          -- \
+          payload \
+          --event_id $XLM_EVENT_ID1 \
+          2>&1)
+        echo "Stored payload: $PAYLOAD"
+        echo "PASS: XLM happy path complete"
+
+  xlm-test-insufficient:
+    desc: "XLM: 1-of-3 signature with insufficient weight"
+    cmds:
+      - |
+        echo "=== XLM TEST: Insufficient weight (1-of-3) ==="
+        HANDLER_ID=$(cat {{.STATE_DIR}}/xlm-handler.id)
+        eval "$(cargo run -p test-vectors 2>/dev/null)"
+        REF_BLOCK=$(cat {{.STATE_DIR}}/ref_block)
+        echo "Using reference_block: $REF_BLOCK"
+
+        RESULT=$(stellar contract invoke \
+          --id $HANDLER_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          -- \
+          verify_xlm \
+          --envelope_bytes $XLM_ENVELOPE2 \
+          --sig_data "{\"signers\": [\"$ED_SIGNER3_PUBKEY\"], \"signatures\": [\"$XLM_ENVELOPE2_SIG3\"], \"reference_block\": $REF_BLOCK}" \
+          2>&1) && STATUS=0 || STATUS=$?
+
+        if [ $STATUS -ne 0 ]; then
+          echo "PASS: verify_xlm correctly rejected (insufficient weight)"
+          echo "$RESULT"
+        else
+          echo "FAIL: verify_xlm should have failed but succeeded"
+          exit 1
+        fi
+
+  xlm-test-invalid-sig:
+    desc: "XLM: Invalid (garbage) signature rejected"
+    cmds:
+      - |
+        echo "=== XLM TEST: Invalid signature ==="
+        HANDLER_ID=$(cat {{.STATE_DIR}}/xlm-handler.id)
+        eval "$(cargo run -p test-vectors 2>/dev/null)"
+        REF_BLOCK=$(cat {{.STATE_DIR}}/ref_block)
+        echo "Using reference_block: $REF_BLOCK"
+
+        RESULT=$(stellar contract invoke \
+          --id $HANDLER_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          -- \
+          verify_xlm \
+          --envelope_bytes $XLM_ENVELOPE3 \
+          --sig_data "{\"signers\": [\"$ED_SIGNER1_PUBKEY\"], \"signatures\": [\"$ED_INVALID_SIG\"], \"reference_block\": $REF_BLOCK}" \
+          2>&1) && STATUS=0 || STATUS=$?
+
+        if [ $STATUS -ne 0 ]; then
+          echo "PASS: verify_xlm correctly rejected (invalid signature)"
+          echo "$RESULT"
+        else
+          echo "FAIL: verify_xlm should have failed but succeeded"
+          exit 1
+        fi
+
+  # ── Aggregate tasks ─────────────────────────────────────────────
+
   refresh-ref-block:
     desc: Update reference block to current ledger (re-register signers for fresh checkpoints)
     cmds:
       - |
-        SECURITY_ID=$(cat {{.STATE_DIR}}/security.id)
         eval "$(cargo run -p test-vectors 2>/dev/null)"
 
         retry() {
@@ -313,10 +495,17 @@ tasks:
           return 1
         }
 
-        echo "Re-registering signers to refresh checkpoints..."
+        SECURITY_ID=$(cat {{.STATE_DIR}}/security.id)
+        echo "Re-registering secp256k1 signers..."
         retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $SIGNER1_PUBKEY --weight 100
         retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $SIGNER2_PUBKEY --weight 200
         retry stellar contract invoke --id $SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $SIGNER3_PUBKEY --weight 50
+
+        ED_SECURITY_ID=$(cat {{.STATE_DIR}}/ed-security.id)
+        echo "Re-registering ed25519 signers..."
+        retry stellar contract invoke --id $ED_SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $ED_SIGNER1_PUBKEY --weight 100
+        retry stellar contract invoke --id $ED_SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $ED_SIGNER2_PUBKEY --weight 200
+        retry stellar contract invoke --id $ED_SECURITY_ID --source {{.SOURCE}} --network {{.NETWORK}} --inclusion-fee {{.INCLUSION_FEE}} -- add_signer --key $ED_SIGNER3_PUBKEY --weight 50
 
         RPC_URL="https://soroban-testnet.stellar.org"
         REF_BLOCK=$(curl -s -X POST "$RPC_URL" \
@@ -327,13 +516,16 @@ tasks:
         echo "Refreshed reference block: $REF_BLOCK"
 
   test:
-    desc: Run all testnet smoke tests (must run within ~17 min of setup or refresh-ref-block)
+    desc: Run all testnet smoke tests
     cmds:
-      - task: test-happy
-      - task: test-insufficient
-      - task: test-invalid-sig
+      - task: eth-test-happy
+      - task: eth-test-insufficient
+      - task: eth-test-invalid-sig
+      - task: xlm-test-happy
+      - task: xlm-test-insufficient
+      - task: xlm-test-invalid-sig
       - echo ""
-      - echo "All testnet smoke tests passed."
+      - echo "All testnet smoke tests passed (ETH + XLM)."
 
   all:
     desc: Full testnet setup + smoke tests
