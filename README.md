@@ -19,7 +19,21 @@ Handler --> Verification --> Security
 
 ## Quick Start
 
-Install [Rust](https://rustup.rs/) (1.94.0+) and [Task](https://taskfile.dev/), then:
+Install [Rust](https://rustup.rs/) (1.94.0+) and [Task](https://taskfile.dev/), then install the `wasm32v1-none` target and the [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) (required for `task optimize` and `task deploy`):
+
+```bash
+task setup          # rustup target add wasm32v1-none + cargo install stellar-cli --locked
+```
+
+On Ubuntu/Debian, `stellar-cli` needs a few system libraries first:
+
+```bash
+sudo apt install -y build-essential pkg-config libdbus-1-dev libudev-dev
+```
+
+For other platforms, see the [official install guide](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli).
+
+Then:
 
 ```bash
 task build          # Build all contracts to WASM
@@ -45,6 +59,36 @@ Run a single test:
 ```bash
 cargo test -p warpdrive-handler test_verify_success
 ```
+
+## Deployment
+
+You can build and optimize all contracts and then deploy them to testnet, with one command:
+
+```bash
+task testnet:deploy
+```
+
+You can then run some manual tests like:
+
+```bash
+task testnet:setup-signers
+
+# should pass first time (second time is error 501 - EventAlreadySeen)
+task testnet:eth-test-happy
+# Should fail with 303 (InsufficientWeight)
+task testnet:eth-test-insufficient
+# Should fail with 301 (InvalidSignature)
+task testnet:eth-test-invalid-sig
+
+# Should pass first time (second time is error 501 - EventAlreadySeen)
+task testnet:xlm-test-happy
+# Should fail with 303 (InsufficientWeight)
+task testnet:xlm-test-insufficient
+# Should fail with 505 (OtherInvocationError) - panic on invalid ed25519 signature
+task testnet:xlm-test-invalid-sig
+```
+
+Note: In order for this to work, you must have previously configured stellar-cli: `task setup`
 
 ## Contracts and Packages
 
