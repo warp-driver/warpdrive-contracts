@@ -1,12 +1,13 @@
 extern crate alloc;
 
 use alloc::vec::Vec as StdVec;
-use soroban_sdk::{Address, Env, String, Vec, contracttype};
+use soroban_sdk::{Address, BytesN, Env, String, Vec, contracttype};
 use warpdrive_shared::ttl;
 use warpdrive_shared::vec_history::{self, Entry, VecHistoryStore};
 
-pub use warpdrive_shared::interfaces::Ed25519PubKey;
 pub use warpdrive_shared::interfaces::security::Ed25519SignerInfo;
+
+use warpdrive_shared::interfaces::Ed25519PubKey;
 
 const HISTORY_CUTOFF: u32 = 200;
 
@@ -42,7 +43,7 @@ pub enum DataKey {
     // These can grow quite large, all in persistent storage
     AllSigners,
     // Vec-based history (one key per timeline)
-    SignerWeightHist(Ed25519PubKey),
+    SignerWeightHist(BytesN<32>),
     TotalWeightHist,
 }
 

@@ -1,6 +1,6 @@
 extern crate std;
 
-use crate::storage::Ed25519PubKey;
+use warpdrive_shared::interfaces::Ed25519PubKey;
 
 use super::setup::deploy_contract;
 use soroban_sdk::{

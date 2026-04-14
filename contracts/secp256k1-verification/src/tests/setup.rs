@@ -3,8 +3,6 @@ use soroban_sdk::{Address, BytesN, Env, testutils::Address as _};
 use warpdrive_secp256k1_security::Secp256k1Security;
 
 mod contract_wasm {
-    use warpdrive_shared::interfaces::{CompressedSecpPubKey, Ed25519PubKey};
-
     soroban_sdk::contractimport!(
         file = "../../target/wasm32v1-none/release/warpdrive_secp256k1_verification.wasm"
     );

@@ -1789,6 +1789,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-vectors"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
+ "ed25519-dalek",
+ "hex",
+ "k256",
+ "sha2",
+ "sha3",
+ "soroban-sdk",
+ "warpdrive-shared",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,7 +1,6 @@
-use soroban_sdk::{Address, Bytes, Env, Vec, contractclient, contracterror};
+use soroban_sdk::{Address, Bytes, BytesN, Env, Vec, contractclient, contracterror};
 
 use super::warpdrive::WarpDriveInterface;
-use super::{CompressedSecpPubKey, Ed25519PubKey, Ed25519Signature, SecpSignature};
 
 // ── Error ────────────────────────────────────────────────────────────
 
@@ -26,14 +25,14 @@ pub trait Secp256k1VerificationInterface: WarpDriveInterface {
     // Queries
     fn security_contract(env: Env) -> Address;
     fn required_weight(env: Env) -> u64;
-    fn signer_weight(env: Env, signer_pubkey: CompressedSecpPubKey) -> u64;
+    fn signer_weight(env: Env, signer_pubkey: BytesN<33>) -> u64;
 
     /// Verify one signature, return the weight of this signer if the signature is valid
     fn check_one(
         env: Env,
         envelope: Bytes,
-        signature: SecpSignature,
-        signer_pubkey: CompressedSecpPubKey,
+        signature: BytesN<65>,
+        signer_pubkey: BytesN<33>,
         reference_block: Option<u32>,
     ) -> Result<u64, VerifyError>;
 
@@ -42,8 +41,8 @@ pub trait Secp256k1VerificationInterface: WarpDriveInterface {
     fn verify(
         env: Env,
         envelope: Bytes,
-        signatures: Vec<SecpSignature>,
-        signer_pubkeys: Vec<CompressedSecpPubKey>,
+        signatures: Vec<BytesN<65>>,
+        signer_pubkeys: Vec<BytesN<33>>,
         reference_block: u32,
     ) -> Result<(), VerifyError>;
 }
@@ -53,14 +52,14 @@ pub trait Ed25519VerificationInterface: WarpDriveInterface {
     // Queries
     fn security_contract(env: Env) -> Address;
     fn required_weight(env: Env) -> u64;
-    fn signer_weight(env: Env, signer_pubkey: Ed25519PubKey) -> u64;
+    fn signer_weight(env: Env, signer_pubkey: BytesN<32>) -> u64;
 
     /// Verify one signature, return the weight of this signer if the signature is valid
     fn check_one(
         env: Env,
         envelope: Bytes,
-        signature: Ed25519Signature,
-        signer_pubkey: Ed25519PubKey,
+        signature: BytesN<64>,
+        signer_pubkey: BytesN<32>,
         reference_block: Option<u32>,
     ) -> Result<u64, VerifyError>;
 
@@ -69,8 +68,8 @@ pub trait Ed25519VerificationInterface: WarpDriveInterface {
     fn verify(
         env: Env,
         envelope: Bytes,
-        signatures: Vec<Ed25519Signature>,
-        signer_pubkeys: Vec<Ed25519PubKey>,
+        signatures: Vec<BytesN<64>>,
+        signer_pubkeys: Vec<BytesN<32>>,
         reference_block: u32,
     ) -> Result<(), VerifyError>;
 }

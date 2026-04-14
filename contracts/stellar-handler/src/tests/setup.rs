@@ -4,8 +4,6 @@ use warpdrive_ed25519_security::Ed25519Security;
 use warpdrive_ed25519_verification::Ed25519Verification;
 
 mod contract_wasm {
-    use warpdrive_shared::interfaces::{CompressedSecpPubKey, Ed25519PubKey};
-
     soroban_sdk::contractimport!(
         file = "../../target/wasm32v1-none/release/warpdrive_stellar_handler.wasm"
     );

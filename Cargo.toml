@@ -3,6 +3,11 @@ resolver = "2"
 members = [
     "contracts/*",
     "packages/*",
+    "tools/*",
+]
+default-members = [
+    "contracts/*",
+    "packages/*",
 ]
 
 [workspace.package]

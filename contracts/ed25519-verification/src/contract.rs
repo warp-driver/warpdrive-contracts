@@ -1,7 +1,6 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec, contract, contractimpl};
 
 use warpdrive_shared::interfaces::{
-    Ed25519PubKey,
     security::Ed25519SecurityClient,
     verification::{Ed25519VerificationInterface, VerifyError},
     warpdrive::{ContractUpgraded, WarpDriveInterface},
@@ -68,7 +67,7 @@ impl Ed25519VerificationInterface for Ed25519Verification {
         Ed25519SecurityClient::new(&env, &security_addr).required_weight()
     }
 
-    fn signer_weight(env: Env, signer_pubkey: Ed25519PubKey) -> u64 {
+    fn signer_weight(env: Env, signer_pubkey: BytesN<32>) -> u64 {
         let security_addr = storage::get_security_contract(&env);
         Ed25519SecurityClient::new(&env, &security_addr).get_signer_weight(&signer_pubkey)
     }
@@ -87,7 +86,7 @@ impl Ed25519VerificationInterface for Ed25519Verification {
         env: Env,
         envelope: Bytes,
         signature: BytesN<64>,
-        signer_pubkey: Ed25519PubKey,
+        signer_pubkey: BytesN<32>,
         reference_block: Option<u32>,
     ) -> Result<u64, VerifyError> {
         utils::verify_ed25519(&env, &envelope, &signature, &signer_pubkey)?;
@@ -119,7 +118,7 @@ impl Ed25519VerificationInterface for Ed25519Verification {
         env: Env,
         envelope: Bytes,
         signatures: Vec<BytesN<64>>,
-        signer_pubkeys: Vec<Ed25519PubKey>,
+        signer_pubkeys: Vec<BytesN<32>>,
         reference_block: u32,
     ) -> Result<(), VerifyError> {
         storage::extend_instance_ttl(&env);
@@ -144,7 +143,7 @@ impl Ed25519VerificationInterface for Ed25519Verification {
         let message_hash = utils::sep053_hash(&env, &envelope);
 
         let mut total_weight: u64 = 0;
-        let mut prev_pubkey: Option<Ed25519PubKey> = None;
+        let mut prev_pubkey: Option<BytesN<32>> = None;
 
         for i in 0..signatures.len() {
             let sig = signatures.get(i).unwrap();

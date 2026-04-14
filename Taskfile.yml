@@ -1,5 +1,8 @@
 version: "3"
 
+includes:
+  testnet: ./taskfiles/testnet.yml
+
 vars:
   WASM_TARGET: wasm32v1-none
   WASM_DIR: target/{{.WASM_TARGET}}/release
@@ -17,10 +20,21 @@ tasks:
     cmds:
       - task: build
 
+  setup:
+    desc: Install stellar-cli and add WASM target
+    cmds:
+      - cargo install stellar-cli --locked
+      - rustup target add {{.WASM_TARGET}}
+
   build:
     desc: Build all contracts to WASM
     cmds:
       - cargo build --target {{.WASM_TARGET}} --release
+
+  optimize:
+    desc: Build contracts for deployment and optimize (uses stellar CLI for proper stripping)
+    cmds:
+      - stellar contract build --optimize
 
   test:
     desc: Run unit tests
@@ -55,29 +69,6 @@ tasks:
     cmds:
       - task: fmt
       - task: clippy
-
-  optimize:
-    desc: Optimize WASM artifacts for deployment
-    deps: [build]
-    cmds:
-      - for:
-          var: CONTRACTS
-        cmd: stellar contract optimize --wasm {{.WASM_DIR}}/warpdrive_{{.ITEM | replace "-" "_"}}.wasm
-
-  deploy:
-    desc: Deploy contracts to network
-    requires:
-      vars: [NETWORK, SOURCE]
-    deps: [optimize]
-    cmds:
-      - for:
-          var: CONTRACTS
-        cmd: |
-          echo "Installing {{.ITEM}}..."
-          stellar contract install \
-            --wasm {{.WASM_DIR}}/warpdrive_{{.ITEM | replace "-" "_"}}.optimized.wasm \
-            --source {{.SOURCE}} \
-            --network {{.NETWORK}}
 
   clean:
     desc: Remove build artifacts
