@@ -1,4 +1,5 @@
 use soroban_sdk::{Bytes, BytesN, Env, crypto::Hash};
+use warpdrive_shared::interfaces::{CompressedSecpPubKey, SecpSignature};
 
 /// EIP-191 hash: `keccak256("\x19Ethereum Signed Message:\n32" || digest)`
 ///
@@ -17,7 +18,7 @@ fn eip191_hash_message(env: &Env, digest: &BytesN<32>) -> Hash<32> {
 /// Compress an uncompressed secp256k1 public key (65 bytes: `04 || x || y`)
 /// into compressed form (33 bytes: `prefix || x`) where prefix is `0x02` (even y)
 /// or `0x03` (odd y).
-fn compress_pubkey(env: &Env, uncompressed: &BytesN<65>) -> BytesN<33> {
+fn compress_pubkey(env: &Env, uncompressed: &BytesN<65>) -> CompressedSecpPubKey {
     let raw = uncompressed.to_array();
     let mut compressed = [0u8; 33];
     // Prefix: 0x02 if y is even, 0x03 if y is odd
@@ -37,8 +38,8 @@ fn compress_pubkey(env: &Env, uncompressed: &BytesN<65>) -> BytesN<33> {
 pub fn is_valid_signature(
     env: &Env,
     envelope: &Bytes,
-    signature: &BytesN<65>,
-    signer_pubkey: &BytesN<33>,
+    signature: &SecpSignature,
+    signer_pubkey: &CompressedSecpPubKey,
 ) -> bool {
     let sig_bytes = signature.to_array();
 
