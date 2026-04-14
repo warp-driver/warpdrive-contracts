@@ -1,12 +1,9 @@
 version: "3"
 
 vars:
-  NETWORK: testnet
-  SOURCE: warpdrive-test
   STATE_DIR: .testnet
   WASM_DIR: target/wasm32v1-none/release
   STAGING_DIR: "{{.STATE_DIR}}/project-spec"
-  INCLUSION_FEE: "10000000"
 
 tasks:
   build-spec:
@@ -23,13 +20,10 @@ tasks:
         rm -rf {{.STAGING_DIR}}
         mkdir -p {{.STAGING_DIR}}/contracts
 
-        ADMIN=$(stellar keys address {{.SOURCE}})
         GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
         TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
         echo "Building project specification..."
-        echo "  Network:    {{.NETWORK}}"
-        echo "  Admin:      $ADMIN"
         echo "  Git commit: $GIT_COMMIT"
 
         # Map state-file names to WASM crate names
@@ -78,10 +72,8 @@ tasks:
         cat > {{.STAGING_DIR}}/spec.json <<EOF
         {
           "version": "1.0.0",
-          "network": "{{.NETWORK}}",
           "git_commit": "$GIT_COMMIT",
           "timestamp": "$TIMESTAMP",
-          "admin": "$ADMIN",
           "contracts": {$ENTRIES
           }
         }
@@ -91,8 +83,6 @@ tasks:
         cat > {{.STAGING_DIR}}/README.md <<EOF
         # WarpDrive Project Specification
 
-        - **Network**: {{.NETWORK}}
-        - **Admin**: \`$ADMIN\`
         - **Generated**: $TIMESTAMP
         - **Git commit**: $GIT_COMMIT
 
@@ -132,7 +122,7 @@ tasks:
           -H "Authorization: Bearer $PINATA_JWT" \
           -F "file=@{{.STAGING_DIR}}/spec.json" \
           -F "network=public" \
-          -F "name=warpdrive-project-spec-{{.NETWORK}}.json")
+          -F "name=warpdrive-project-spec.json")
 
         # v3 response: { "data": { "cid": "bafy..." } }
         CID=$(echo "$RESPONSE" | grep -o '"cid":"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -150,87 +140,18 @@ tasks:
         echo "  URI:     ipfs://$CID"
         echo "  Gateway: https://gateway.pinata.cloud/ipfs/$CID"
 
-  update-contract:
-    desc: Update the on-chain project_spec_repo to the IPFS CID
-    preconditions:
-      - sh: test -f {{.STATE_DIR}}/spec.cid
-        msg: "No CID found. Run 'task ipfs:pin' first."
-      - sh: test -f {{.STATE_DIR}}/project-root.id
-        msg: "No project-root contract ID found."
-    cmds:
-      - |
-        set -e
-
-        CID=$(cat {{.STATE_DIR}}/spec.cid)
-        PROJECT_ROOT_ID=$(cat {{.STATE_DIR}}/project-root.id)
-        IPFS_URI="ipfs://$CID"
-
-        echo "Updating project_spec_repo on-chain..."
-        echo "  Contract:  $PROJECT_ROOT_ID"
-        echo "  New value: $IPFS_URI"
-        echo ""
-
-        stellar contract invoke \
-          --id $PROJECT_ROOT_ID \
-          --source {{.SOURCE}} \
-          --network {{.NETWORK}} \
-          --inclusion-fee {{.INCLUSION_FEE}} \
-          -- \
-          update_project_spec_repo \
-          --repo "$IPFS_URI"
-
-        echo ""
-        echo "Verifying..."
-        STORED=$(stellar contract invoke \
-          --id $PROJECT_ROOT_ID \
-          --source {{.SOURCE}} \
-          --network {{.NETWORK}} \
-          --send no \
-          -- \
-          project_spec_repo)
-
-        echo "On-chain project_spec_repo: $STORED"
-
-  publish:
-    desc: "Full pipeline: build spec, pin to IPFS, update on-chain"
-    cmds:
-      - task: build-spec
-      - task: pin
-      - task: update-contract
-      - echo ""
-      - echo "Project specification published to IPFS and recorded on-chain."
-
   status:
-    desc: Show current IPFS and on-chain project specification status
+    desc: Show current IPFS project specification status
     cmds:
       - |
         echo "=== Project Specification Status ==="
         echo ""
 
-        # Pinata CID
         if [ -f {{.STATE_DIR}}/spec.cid ]; then
           CID=$(cat {{.STATE_DIR}}/spec.cid)
           echo "CID:     $CID"
           echo "URI:     ipfs://$CID"
           echo "Gateway: https://gateway.pinata.cloud/ipfs/$CID"
         else
-          echo "CID: (none — run 'task ipfs:pin')"
-        fi
-
-        echo ""
-
-        # On-chain value
-        if [ -f {{.STATE_DIR}}/project-root.id ]; then
-          PROJECT_ROOT_ID=$(cat {{.STATE_DIR}}/project-root.id)
-          echo "Project Root: $PROJECT_ROOT_ID"
-          STORED=$(stellar contract invoke \
-            --id $PROJECT_ROOT_ID \
-            --source {{.SOURCE}} \
-            --network {{.NETWORK}} \
-            --send no \
-            -- \
-            project_spec_repo 2>&1) || STORED="(query failed)"
-          echo "On-chain:     $STORED"
-        else
-          echo "Project Root: (not deployed)"
+          echo "CID: (none - run 'task ipfs:pin')"
         fi

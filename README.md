@@ -98,17 +98,9 @@ After deploying contracts, you can publish the project specification to IPFS via
 # Set your Pinata JWT (get one at https://app.pinata.cloud/developers/api-keys)
 export PINATA_JWT=<your-jwt>
 
-# Build spec.json from deployment state, upload to Pinata, update on-chain
-task ipfs:publish
-```
-
-Or run each step individually:
-
-```bash
-task ipfs:build-spec       # Assemble spec.json + copy WASMs from deploy state
-task ipfs:pin              # Upload spec.json to Pinata, get CID
-task ipfs:update-contract  # Set project_spec_repo to ipfs://<CID> on-chain
-task ipfs:status           # Show current CID and on-chain value
+task ipfs:build-spec    # Assemble spec.json + copy WASMs from deploy state
+task ipfs:pin           # Upload spec.json to Pinata, get CID
+task ipfs:status        # Show current CID
 ```
 
 ## Contracts and Packages
