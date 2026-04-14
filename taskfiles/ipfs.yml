@@ -1,0 +1,236 @@
+version: "3"
+
+vars:
+  NETWORK: testnet
+  SOURCE: warpdrive-test
+  STATE_DIR: .testnet
+  WASM_DIR: target/wasm32v1-none/release
+  STAGING_DIR: "{{.STATE_DIR}}/project-spec"
+  INCLUSION_FEE: "10000000"
+
+tasks:
+  build-spec:
+    desc: Assemble the project specification directory from deployed state
+    preconditions:
+      - sh: test -d {{.STATE_DIR}}
+        msg: "No deployment state found in {{.STATE_DIR}}. Run 'task testnet:setup' first."
+      - sh: test -f {{.STATE_DIR}}/project-root.id
+        msg: "No project-root contract ID found. Run 'task testnet:deploy' first."
+    cmds:
+      - |
+        set -e
+
+        rm -rf {{.STAGING_DIR}}
+        mkdir -p {{.STAGING_DIR}}/contracts
+
+        ADMIN=$(stellar keys address {{.SOURCE}})
+        GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        echo "Building project specification..."
+        echo "  Network:    {{.NETWORK}}"
+        echo "  Admin:      $ADMIN"
+        echo "  Git commit: $GIT_COMMIT"
+
+        # Map state-file names to WASM crate names
+        wasm_for() {
+          case "$1" in
+            security)        echo "warpdrive_secp256k1_security" ;;
+            verification)    echo "warpdrive_secp256k1_verification" ;;
+            handler)         echo "warpdrive_ethereum_handler" ;;
+            eth-handler)     echo "warpdrive_ethereum_handler" ;;
+            ed-security)     echo "warpdrive_ed25519_security" ;;
+            ed-verification) echo "warpdrive_ed25519_verification" ;;
+            xlm-handler)     echo "warpdrive_stellar_handler" ;;
+            project-root)    echo "warpdrive_project_root" ;;
+            *)               echo "" ;;
+          esac
+        }
+
+        # Discover deployed contracts from state directory
+        ENTRIES=""
+        README_LINES=""
+        for ID_FILE in {{.STATE_DIR}}/*.id; do
+          [ -f "$ID_FILE" ] || continue
+          NAME=$(basename "$ID_FILE" .id)
+          CONTRACT_ID=$(cat "$ID_FILE")
+
+          WASM_HASH="not-built"
+          WASM_CRATE=$(wasm_for "$NAME")
+          if [ -n "$WASM_CRATE" ]; then
+            WASM_FILE="{{.WASM_DIR}}/${WASM_CRATE}.wasm"
+            if [ -f "$WASM_FILE" ]; then
+              WASM_HASH=$(sha256sum "$WASM_FILE" | cut -d' ' -f1)
+              cp "$WASM_FILE" "{{.STAGING_DIR}}/contracts/"
+            fi
+          fi
+
+          if [ -n "$ENTRIES" ]; then
+            ENTRIES="${ENTRIES},"
+          fi
+          ENTRIES="$ENTRIES
+            \"${NAME}\": { \"id\": \"${CONTRACT_ID}\", \"wasm_hash\": \"sha256:${WASM_HASH}\" }"
+          README_LINES="$README_LINES
+        - **${NAME}**: \`${CONTRACT_ID}\`"
+        done
+
+        # Write spec.json
+        cat > {{.STAGING_DIR}}/spec.json <<EOF
+        {
+          "version": "1.0.0",
+          "network": "{{.NETWORK}}",
+          "git_commit": "$GIT_COMMIT",
+          "timestamp": "$TIMESTAMP",
+          "admin": "$ADMIN",
+          "contracts": {$ENTRIES
+          }
+        }
+        EOF
+
+        # Write README
+        cat > {{.STAGING_DIR}}/README.md <<EOF
+        # WarpDrive Project Specification
+
+        - **Network**: {{.NETWORK}}
+        - **Admin**: \`$ADMIN\`
+        - **Generated**: $TIMESTAMP
+        - **Git commit**: $GIT_COMMIT
+
+        ## Contracts
+        $README_LINES
+        EOF
+
+        echo ""
+        echo "Project specification built in {{.STAGING_DIR}}/"
+        echo "Contents:"
+        find {{.STAGING_DIR}} -type f | sort | while read f; do
+          SIZE=$(wc -c < "$f")
+          echo "  ${f#{{.STAGING_DIR}}/} (${SIZE} bytes)"
+        done
+
+  pin:
+    desc: Upload project specification to Pinata (requires PINATA_JWT env var)
+    preconditions:
+      - sh: test -d {{.STAGING_DIR}}
+        msg: "No staging directory found. Run 'task ipfs:build-spec' first."
+      - sh: test -n "$PINATA_JWT"
+        msg: |
+          PINATA_JWT is not set. To upload to IPFS via Pinata:
+            1. Create a free account at https://app.pinata.cloud
+            2. Generate an API key at https://app.pinata.cloud/developers/api-keys
+            3. Export it: export PINATA_JWT=<your-jwt>
+            4. Re-run: task ipfs:pin
+    cmds:
+      - |
+        set -e
+
+        echo "Uploading project specification to Pinata..."
+
+        # Upload spec.json via Pinata v3 API
+        RESPONSE=$(curl -s -X POST \
+          "https://uploads.pinata.cloud/v3/files" \
+          -H "Authorization: Bearer $PINATA_JWT" \
+          -F "file=@{{.STAGING_DIR}}/spec.json" \
+          -F "network=public" \
+          -F "name=warpdrive-project-spec-{{.NETWORK}}.json")
+
+        # v3 response: { "data": { "cid": "bafy..." } }
+        CID=$(echo "$RESPONSE" | grep -o '"cid":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+        if [ -z "$CID" ]; then
+          echo "Pinata upload failed:"
+          echo "$RESPONSE"
+          exit 1
+        fi
+
+        echo "$CID" > {{.STATE_DIR}}/spec.cid
+        echo ""
+        echo "Pinned to IPFS via Pinata:"
+        echo "  CID:     $CID"
+        echo "  URI:     ipfs://$CID"
+        echo "  Gateway: https://gateway.pinata.cloud/ipfs/$CID"
+
+  update-contract:
+    desc: Update the on-chain project_spec_repo to the IPFS CID
+    preconditions:
+      - sh: test -f {{.STATE_DIR}}/spec.cid
+        msg: "No CID found. Run 'task ipfs:pin' first."
+      - sh: test -f {{.STATE_DIR}}/project-root.id
+        msg: "No project-root contract ID found."
+    cmds:
+      - |
+        set -e
+
+        CID=$(cat {{.STATE_DIR}}/spec.cid)
+        PROJECT_ROOT_ID=$(cat {{.STATE_DIR}}/project-root.id)
+        IPFS_URI="ipfs://$CID"
+
+        echo "Updating project_spec_repo on-chain..."
+        echo "  Contract:  $PROJECT_ROOT_ID"
+        echo "  New value: $IPFS_URI"
+        echo ""
+
+        stellar contract invoke \
+          --id $PROJECT_ROOT_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --inclusion-fee {{.INCLUSION_FEE}} \
+          -- \
+          update_project_spec_repo \
+          --repo "$IPFS_URI"
+
+        echo ""
+        echo "Verifying..."
+        STORED=$(stellar contract invoke \
+          --id $PROJECT_ROOT_ID \
+          --source {{.SOURCE}} \
+          --network {{.NETWORK}} \
+          --send no \
+          -- \
+          project_spec_repo)
+
+        echo "On-chain project_spec_repo: $STORED"
+
+  publish:
+    desc: "Full pipeline: build spec, pin to IPFS, update on-chain"
+    cmds:
+      - task: build-spec
+      - task: pin
+      - task: update-contract
+      - echo ""
+      - echo "Project specification published to IPFS and recorded on-chain."
+
+  status:
+    desc: Show current IPFS and on-chain project specification status
+    cmds:
+      - |
+        echo "=== Project Specification Status ==="
+        echo ""
+
+        # Pinata CID
+        if [ -f {{.STATE_DIR}}/spec.cid ]; then
+          CID=$(cat {{.STATE_DIR}}/spec.cid)
+          echo "CID:     $CID"
+          echo "URI:     ipfs://$CID"
+          echo "Gateway: https://gateway.pinata.cloud/ipfs/$CID"
+        else
+          echo "CID: (none — run 'task ipfs:pin')"
+        fi
+
+        echo ""
+
+        # On-chain value
+        if [ -f {{.STATE_DIR}}/project-root.id ]; then
+          PROJECT_ROOT_ID=$(cat {{.STATE_DIR}}/project-root.id)
+          echo "Project Root: $PROJECT_ROOT_ID"
+          STORED=$(stellar contract invoke \
+            --id $PROJECT_ROOT_ID \
+            --source {{.SOURCE}} \
+            --network {{.NETWORK}} \
+            --send no \
+            -- \
+            project_spec_repo 2>&1) || STORED="(query failed)"
+          echo "On-chain:     $STORED"
+        else
+          echo "Project Root: (not deployed)"
+        fi
