@@ -2,6 +2,7 @@ version: "3"
 
 includes:
   testnet: ./taskfiles/testnet.yml
+  ipfs: ./taskfiles/ipfs.yml
 
 vars:
   WASM_TARGET: wasm32v1-none

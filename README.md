@@ -90,6 +90,26 @@ task testnet:xlm-test-invalid-sig
 
 Note: In order for this to work, you must have previously configured stellar-cli: `task setup`
 
+### IPFS Project Specification
+
+After deploying contracts, you can publish the project specification to IPFS via [Pinata](https://app.pinata.cloud). This pins a `spec.json` containing contract IDs, WASM hashes, and deployment metadata - the file that Vectrs query on startup.
+
+```bash
+# Set your Pinata JWT (get one at https://app.pinata.cloud/developers/api-keys)
+export PINATA_JWT=<your-jwt>
+
+task ipfs:build-spec    # Assemble spec.json + copy WASMs from deploy state
+task ipfs:pin           # Upload WASMs and spec.json to Pinata
+task ipfs:status        # Show current CID
+```
+
+Verify the published spec:
+
+```bash
+CID=$(cat .testnet/spec.cid)
+curl -s "https://gateway.pinata.cloud/ipfs/$CID" | jq .
+```
+
 ## Contracts and Packages
 
 ### Contracts

@@ -1,0 +1,184 @@
+version: "3"
+
+vars:
+  STATE_DIR: .testnet
+  WASM_DIR: target/wasm32v1-none/release
+  STAGING_DIR: "{{.STATE_DIR}}/project-spec"
+
+tasks:
+  build-spec:
+    desc: Assemble the project specification directory from deployed state
+    preconditions:
+      - sh: test -d {{.STATE_DIR}}
+        msg: "No deployment state found in {{.STATE_DIR}}. Run 'task testnet:setup' first."
+      - sh: test -f {{.STATE_DIR}}/project-root.id
+        msg: "No project-root contract ID found. Run 'task testnet:deploy' first."
+    cmds:
+      - |
+        set -e
+
+        rm -rf {{.STAGING_DIR}}
+        mkdir -p {{.STAGING_DIR}}/contracts
+
+        GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        echo "Building project specification..."
+        echo "  Git commit: $GIT_COMMIT"
+
+        # Map state-file names to WASM crate names
+        wasm_for() {
+          case "$1" in
+            security)        echo "warpdrive_secp256k1_security" ;;
+            verification)    echo "warpdrive_secp256k1_verification" ;;
+            handler)         echo "warpdrive_ethereum_handler" ;;
+            eth-handler)     echo "warpdrive_ethereum_handler" ;;
+            ed-security)     echo "warpdrive_ed25519_security" ;;
+            ed-verification) echo "warpdrive_ed25519_verification" ;;
+            xlm-handler)     echo "warpdrive_stellar_handler" ;;
+            project-root)    echo "warpdrive_project_root" ;;
+            *)               echo "" ;;
+          esac
+        }
+
+        # Discover deployed contracts from state directory
+        ENTRIES=""
+        README_LINES=""
+        for ID_FILE in {{.STATE_DIR}}/*.id; do
+          [ -f "$ID_FILE" ] || continue
+          NAME=$(basename "$ID_FILE" .id)
+          CONTRACT_ID=$(cat "$ID_FILE")
+
+          WASM_CRATE=$(wasm_for "$NAME")
+          if [ -z "$WASM_CRATE" ]; then
+            echo "ERROR: Unknown contract '$NAME' (no WASM mapping)"
+            exit 1
+          fi
+
+          WASM_FILE="{{.WASM_DIR}}/${WASM_CRATE}.wasm"
+          if [ ! -f "$WASM_FILE" ]; then
+            echo "ERROR: WASM not found for '$NAME': $WASM_FILE"
+            echo "  Run 'task optimize' first."
+            exit 1
+          fi
+
+          WASM_HASH=$(sha256sum "$WASM_FILE" | cut -d' ' -f1)
+          cp "$WASM_FILE" "{{.STAGING_DIR}}/contracts/"
+
+          if [ -n "$ENTRIES" ]; then
+            ENTRIES="${ENTRIES},"
+          fi
+          ENTRIES="$ENTRIES
+            \"${NAME}\": { \"id\": \"${CONTRACT_ID}\", \"digest\": \"sha256:${WASM_HASH}\", \"uri\": \"\" }"
+          README_LINES="$README_LINES
+        - **${NAME}**: \`${CONTRACT_ID}\`"
+        done
+
+        # Write spec.json (uri fields get filled in by ipfs:pin)
+        cat > {{.STAGING_DIR}}/spec.json <<EOF
+        {
+          "version": "1.0.0",
+          "git_commit": "$GIT_COMMIT",
+          "timestamp": "$TIMESTAMP",
+          "contracts": {$ENTRIES
+          }
+        }
+        EOF
+
+        # Write README
+        cat > {{.STAGING_DIR}}/README.md <<EOF
+        # WarpDrive Project Specification
+
+        - **Generated**: $TIMESTAMP
+        - **Git commit**: $GIT_COMMIT
+
+        ## Contracts
+        $README_LINES
+        EOF
+
+        echo ""
+        echo "Project specification built in {{.STAGING_DIR}}/"
+        echo "Contents:"
+        find {{.STAGING_DIR}} -type f | sort | while read f; do
+          SIZE=$(wc -c < "$f")
+          echo "  ${f#{{.STAGING_DIR}}/} (${SIZE} bytes)"
+        done
+
+  pin:
+    desc: Upload WASMs and spec.json to Pinata (requires PINATA_JWT env var)
+    preconditions:
+      - sh: test -d {{.STAGING_DIR}}
+        msg: "No staging directory found. Run 'task ipfs:build-spec' first."
+      - sh: test -f {{.STAGING_DIR}}/spec.json
+        msg: "No spec.json found. Run 'task ipfs:build-spec' first."
+      - sh: test -n "$PINATA_JWT"
+        msg: |
+          PINATA_JWT is not set. To upload to IPFS via Pinata:
+            1. Create a free account at https://app.pinata.cloud
+            2. Generate an API key at https://app.pinata.cloud/developers/api-keys
+            3. Export it: export PINATA_JWT=<your-jwt>
+            4. Re-run: task ipfs:pin
+    cmds:
+      - |
+        set -e
+
+        upload_to_pinata() {
+          local FILE="$1"
+          local NAME="$2"
+          RESPONSE=$(curl -s -X POST \
+            "https://uploads.pinata.cloud/v3/files" \
+            -H "Authorization: Bearer $PINATA_JWT" \
+            -F "file=@${FILE}" \
+            -F "network=public" \
+            -F "name=${NAME}")
+
+          CID=$(echo "$RESPONSE" | grep -o '"cid":"[^"]*"' | head -1 | cut -d'"' -f4)
+          if [ -z "$CID" ]; then
+            echo "ERROR: Pinata upload failed for $NAME:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+          echo "$CID"
+        }
+
+        # Upload each WASM file and collect CIDs
+        echo "Uploading WASM files to Pinata..."
+        for WASM_FILE in {{.STAGING_DIR}}/contracts/*.wasm; do
+          [ -f "$WASM_FILE" ] || continue
+          WASM_NAME=$(basename "$WASM_FILE")
+          WASM_CID=$(upload_to_pinata "$WASM_FILE" "$WASM_NAME")
+          echo "  $WASM_NAME -> $WASM_CID"
+
+          # Inject uri into spec.json for this contract
+          # Match by digest since the WASM hash is unique per file
+          WASM_HASH=$(sha256sum "$WASM_FILE" | cut -d' ' -f1)
+          sed -i "s|\"digest\": \"sha256:${WASM_HASH}\", \"uri\": \"\"|\"digest\": \"sha256:${WASM_HASH}\", \"uri\": \"ipfs://${WASM_CID}\"|" {{.STAGING_DIR}}/spec.json
+        done
+
+        # Upload the final spec.json
+        echo ""
+        echo "Uploading spec.json to Pinata..."
+        SPEC_CID=$(upload_to_pinata "{{.STAGING_DIR}}/spec.json" "warpdrive-project-spec.json")
+
+        echo "$SPEC_CID" > {{.STATE_DIR}}/spec.cid
+        echo ""
+        echo "Pinned to IPFS via Pinata:"
+        echo "  CID:     $SPEC_CID"
+        echo "  URI:     ipfs://$SPEC_CID"
+        echo "  Gateway: https://gateway.pinata.cloud/ipfs/$SPEC_CID"
+
+  status:
+    desc: Show current IPFS project specification status
+    cmds:
+      - |
+        echo "=== Project Specification Status ==="
+        echo ""
+
+        if [ -f {{.STATE_DIR}}/spec.cid ]; then
+          CID=$(cat {{.STATE_DIR}}/spec.cid)
+          echo "CID:     $CID"
+          echo "URI:     ipfs://$CID"
+          echo "Gateway: https://gateway.pinata.cloud/ipfs/$CID"
+        else
+          echo "CID: (none - run 'task ipfs:pin')"
+        fi
