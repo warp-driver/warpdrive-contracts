@@ -49,26 +49,32 @@ tasks:
           NAME=$(basename "$ID_FILE" .id)
           CONTRACT_ID=$(cat "$ID_FILE")
 
-          WASM_HASH="not-built"
           WASM_CRATE=$(wasm_for "$NAME")
-          if [ -n "$WASM_CRATE" ]; then
-            WASM_FILE="{{.WASM_DIR}}/${WASM_CRATE}.wasm"
-            if [ -f "$WASM_FILE" ]; then
-              WASM_HASH=$(sha256sum "$WASM_FILE" | cut -d' ' -f1)
-              cp "$WASM_FILE" "{{.STAGING_DIR}}/contracts/"
-            fi
+          if [ -z "$WASM_CRATE" ]; then
+            echo "ERROR: Unknown contract '$NAME' (no WASM mapping)"
+            exit 1
           fi
+
+          WASM_FILE="{{.WASM_DIR}}/${WASM_CRATE}.wasm"
+          if [ ! -f "$WASM_FILE" ]; then
+            echo "ERROR: WASM not found for '$NAME': $WASM_FILE"
+            echo "  Run 'task optimize' first."
+            exit 1
+          fi
+
+          WASM_HASH=$(sha256sum "$WASM_FILE" | cut -d' ' -f1)
+          cp "$WASM_FILE" "{{.STAGING_DIR}}/contracts/"
 
           if [ -n "$ENTRIES" ]; then
             ENTRIES="${ENTRIES},"
           fi
           ENTRIES="$ENTRIES
-            \"${NAME}\": { \"id\": \"${CONTRACT_ID}\", \"wasm_hash\": \"sha256:${WASM_HASH}\" }"
+            \"${NAME}\": { \"id\": \"${CONTRACT_ID}\", \"wasm_hash\": \"sha256:${WASM_HASH}\", \"wasm_url\": \"\" }"
           README_LINES="$README_LINES
         - **${NAME}**: \`${CONTRACT_ID}\`"
         done
 
-        # Write spec.json
+        # Write spec.json (wasm_url fields get filled in by ipfs:pin)
         cat > {{.STAGING_DIR}}/spec.json <<EOF
         {
           "version": "1.0.0",
@@ -99,10 +105,12 @@ tasks:
         done
 
   pin:
-    desc: Upload project specification to Pinata (requires PINATA_JWT env var)
+    desc: Upload WASMs and spec.json to Pinata (requires PINATA_JWT env var)
     preconditions:
       - sh: test -d {{.STAGING_DIR}}
         msg: "No staging directory found. Run 'task ipfs:build-spec' first."
+      - sh: test -f {{.STAGING_DIR}}/spec.json
+        msg: "No spec.json found. Run 'task ipfs:build-spec' first."
       - sh: test -n "$PINATA_JWT"
         msg: |
           PINATA_JWT is not set. To upload to IPFS via Pinata:
@@ -114,31 +122,50 @@ tasks:
       - |
         set -e
 
-        echo "Uploading project specification to Pinata..."
+        upload_to_pinata() {
+          local FILE="$1"
+          local NAME="$2"
+          RESPONSE=$(curl -s -X POST \
+            "https://uploads.pinata.cloud/v3/files" \
+            -H "Authorization: Bearer $PINATA_JWT" \
+            -F "file=@${FILE}" \
+            -F "network=public" \
+            -F "name=${NAME}")
 
-        # Upload spec.json via Pinata v3 API
-        RESPONSE=$(curl -s -X POST \
-          "https://uploads.pinata.cloud/v3/files" \
-          -H "Authorization: Bearer $PINATA_JWT" \
-          -F "file=@{{.STAGING_DIR}}/spec.json" \
-          -F "network=public" \
-          -F "name=warpdrive-project-spec.json")
+          CID=$(echo "$RESPONSE" | grep -o '"cid":"[^"]*"' | head -1 | cut -d'"' -f4)
+          if [ -z "$CID" ]; then
+            echo "ERROR: Pinata upload failed for $NAME:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+          echo "$CID"
+        }
 
-        # v3 response: { "data": { "cid": "bafy..." } }
-        CID=$(echo "$RESPONSE" | grep -o '"cid":"[^"]*"' | head -1 | cut -d'"' -f4)
+        # Upload each WASM file and collect CIDs
+        echo "Uploading WASM files to Pinata..."
+        for WASM_FILE in {{.STAGING_DIR}}/contracts/*.wasm; do
+          [ -f "$WASM_FILE" ] || continue
+          WASM_NAME=$(basename "$WASM_FILE")
+          WASM_CID=$(upload_to_pinata "$WASM_FILE" "$WASM_NAME")
+          echo "  $WASM_NAME -> $WASM_CID"
 
-        if [ -z "$CID" ]; then
-          echo "Pinata upload failed:"
-          echo "$RESPONSE"
-          exit 1
-        fi
+          # Inject wasm_url into spec.json for this contract
+          # Match by wasm_hash since the WASM hash is unique per file
+          WASM_HASH=$(sha256sum "$WASM_FILE" | cut -d' ' -f1)
+          sed -i "s|\"wasm_hash\": \"sha256:${WASM_HASH}\", \"wasm_url\": \"\"|\"wasm_hash\": \"sha256:${WASM_HASH}\", \"wasm_url\": \"ipfs://${WASM_CID}\"|" {{.STAGING_DIR}}/spec.json
+        done
 
-        echo "$CID" > {{.STATE_DIR}}/spec.cid
+        # Upload the final spec.json
+        echo ""
+        echo "Uploading spec.json to Pinata..."
+        SPEC_CID=$(upload_to_pinata "{{.STAGING_DIR}}/spec.json" "warpdrive-project-spec.json")
+
+        echo "$SPEC_CID" > {{.STATE_DIR}}/spec.cid
         echo ""
         echo "Pinned to IPFS via Pinata:"
-        echo "  CID:     $CID"
-        echo "  URI:     ipfs://$CID"
-        echo "  Gateway: https://gateway.pinata.cloud/ipfs/$CID"
+        echo "  CID:     $SPEC_CID"
+        echo "  URI:     ipfs://$SPEC_CID"
+        echo "  Gateway: https://gateway.pinata.cloud/ipfs/$SPEC_CID"
 
   status:
     desc: Show current IPFS project specification status
