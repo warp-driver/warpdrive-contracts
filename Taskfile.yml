@@ -79,3 +79,9 @@ tasks:
     desc: Quick cargo check (no WASM build)
     cmds:
       - cargo check --all-targets
+
+  publish:
+    desc: Publish warpdrive-shared to crates.io
+    dir: '{{.ROOT_DIR}}/packages/shared'
+    cmds:
+      - cargo publish
