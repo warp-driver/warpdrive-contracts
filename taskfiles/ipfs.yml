@@ -69,12 +69,12 @@ tasks:
             ENTRIES="${ENTRIES},"
           fi
           ENTRIES="$ENTRIES
-            \"${NAME}\": { \"id\": \"${CONTRACT_ID}\", \"wasm_hash\": \"sha256:${WASM_HASH}\", \"wasm_url\": \"\" }"
+            \"${NAME}\": { \"id\": \"${CONTRACT_ID}\", \"digest\": \"sha256:${WASM_HASH}\", \"uri\": \"\" }"
           README_LINES="$README_LINES
         - **${NAME}**: \`${CONTRACT_ID}\`"
         done
 
-        # Write spec.json (wasm_url fields get filled in by ipfs:pin)
+        # Write spec.json (uri fields get filled in by ipfs:pin)
         cat > {{.STAGING_DIR}}/spec.json <<EOF
         {
           "version": "1.0.0",
@@ -149,10 +149,10 @@ tasks:
           WASM_CID=$(upload_to_pinata "$WASM_FILE" "$WASM_NAME")
           echo "  $WASM_NAME -> $WASM_CID"
 
-          # Inject wasm_url into spec.json for this contract
-          # Match by wasm_hash since the WASM hash is unique per file
+          # Inject uri into spec.json for this contract
+          # Match by digest since the WASM hash is unique per file
           WASM_HASH=$(sha256sum "$WASM_FILE" | cut -d' ' -f1)
-          sed -i "s|\"wasm_hash\": \"sha256:${WASM_HASH}\", \"wasm_url\": \"\"|\"wasm_hash\": \"sha256:${WASM_HASH}\", \"wasm_url\": \"ipfs://${WASM_CID}\"|" {{.STAGING_DIR}}/spec.json
+          sed -i "s|\"digest\": \"sha256:${WASM_HASH}\", \"uri\": \"\"|\"digest\": \"sha256:${WASM_HASH}\", \"uri\": \"ipfs://${WASM_CID}\"|" {{.STAGING_DIR}}/spec.json
         done
 
         # Upload the final spec.json
