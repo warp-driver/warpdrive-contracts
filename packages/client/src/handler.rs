@@ -1,9 +1,5 @@
-use soroban_rs::xdr::{
-    ScVal
-};
-use soroban_rs::{
-    Account, ClientContractConfigs, ContractId, Env, EnvConfigs, Signer,
-};
+use soroban_rs::xdr::ScVal;
+use soroban_rs::{Account, ClientContractConfigs, ContractId, Env, EnvConfigs, Signer};
 
 use crate::utils::{execute, query};
 pub struct EthereumHandlerClient {

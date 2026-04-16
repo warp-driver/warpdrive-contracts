@@ -1,12 +1,12 @@
 [package]
 name = "warpdrive-client"
 description = "Soroban-rs clients for WarpDrive Stellar contracts"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-authors.workspace = true
-repository.workspace = true
-rust-version.workspace = true
+edition = "2024"
+version = "0.1.0"
+license = "GPL-3.0-or-later"
+authors = ["WarpDrive"]
+repository = "https://github.com/warp-driver/warpdrive-contracts"
+rust-version = "1.90.0"
 
 [lib]
 crate-type = ["rlib"]
