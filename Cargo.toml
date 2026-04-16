@@ -20,6 +20,7 @@ rust-version = "1.90.0"
 
 [workspace.dependencies]
 soroban-sdk = "25.3.0"
+warpdrive-client = { path = "packages/client" }
 warpdrive-shared = { path = "packages/shared" }
 warpdrive-secp256k1-security = { path = "contracts/secp256k1-security" }
 warpdrive-secp256k1-verification = { path = "contracts/secp256k1-verification" }
