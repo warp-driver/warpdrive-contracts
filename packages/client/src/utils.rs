@@ -87,3 +87,7 @@ async fn build_tx(
         .build()
         .await
 }
+
+pub(crate) fn unexpected(res: &ScVal) -> SorobanHelperError {
+    SorobanHelperError::TransactionSimulationFailed(format!("Unexpected result: {:?}", res))
+}

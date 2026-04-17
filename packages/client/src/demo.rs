@@ -3,6 +3,7 @@ use soroban_rs::{Account, ClientContractConfigs, ContractId, Env, EnvConfigs, Si
 use stellar_strkey::ed25519::PrivateKey;
 
 use crate::handler::EthereumHandlerClient;
+use crate::warpdrive::WarpdriveClient;
 
 const MAINNET_PASSPHRASE: &str = "Public Global Stellar Network ; September 2015";
 
@@ -25,7 +26,7 @@ pub async fn demo_query(env_config: EnvConfigs, contract_id: ContractId) {
         source_account: account,
     };
 
-    let hc = EthereumHandlerClient::new(&cfg);
+    let hc = EthereumHandlerClient::new(cfg);
     let ver = hc.version().await.unwrap();
     println!("{:?}", ver)
 }
@@ -39,7 +40,7 @@ pub async fn demo_execute(env_config: EnvConfigs, contract_id: ContractId, accou
         source_account: account,
     };
 
-    let hc = EthereumHandlerClient::new(&cfg);
+    let hc = EthereumHandlerClient::new(cfg);
     let ver = hc.version().await.unwrap();
     println!("{:?}", ver)
 }
