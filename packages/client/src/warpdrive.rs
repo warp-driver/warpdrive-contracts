@@ -50,10 +50,9 @@ pub trait WarpdriveClient {
     async fn version(&self) -> Result<String, SorobanHelperError> {
         let res = query(self.get_client_configs(), "version", vec![]).await?;
         if let ScVal::String(ScString(ref s)) = res {
-            return String::from_utf8(s.as_vec().clone()).map_err(|_| {
-                SorobanHelperError::XdrEncodingFailed("version not utf-8".to_string())
-            });
+            Ok(String::from_utf8_lossy(s.as_slice()).to_string())
+        } else {
+            Err(unexpected(&res))
         }
-        Err(unexpected(&res))
     }
 }

@@ -1,4 +1,6 @@
-use soroban_rs::xdr::{ScVal, Transaction, TransactionEnvelope, TransactionV1Envelope, VecM};
+use soroban_rs::xdr::{
+    ScVal, SorobanCredentials, Transaction, TransactionEnvelope, TransactionV1Envelope, VecM,
+};
 use soroban_rs::{
     ClientContractConfigs, Env, Operations, SorobanHelperError, SorobanTransactionResponse,
     TransactionBuilder,
@@ -52,6 +54,23 @@ pub async fn execute(
 
     if let Some(err) = simulation.error {
         return Err(SorobanHelperError::TransactionSimulationFailed(err));
+    }
+
+    // If we would simulate calling a function that does have admin.require_auth() call (like upgrade),
+    // the sim_results would return a success containing an Address which is required for this operation's authentication.
+    // If I understand correctly, when sim reads admin from storage it compares it to the tx's source account
+    // and if it's the same it returns SourceAccount, if not it's just an Address(admin_pubkey).
+    // https://docs.rs/soroban-sdk/latest/soroban_sdk/xdr/enum.SorobanCredentials.html
+    // That's why if the returned auth result is an Address(_) it means it will fail the require_auth() call on real execution.
+    let sim_results = simulation.results().unwrap_or_default();
+    for result in &sim_results {
+        for auth in &result.auth {
+            if matches!(auth.credentials, SorobanCredentials::Address(_)) {
+                return Err(SorobanHelperError::NotSupported(
+                    "Address authorization not yet supported".to_string(),
+                ));
+            }
+        }
     }
 
     let updated_fee = DEFAULT_TRANSACTION_FEE.max(

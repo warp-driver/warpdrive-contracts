@@ -2,7 +2,7 @@ use ed25519_dalek::SigningKey;
 use soroban_rs::{Account, ClientContractConfigs, ContractId, Env, EnvConfigs, Signer};
 use stellar_strkey::ed25519::PrivateKey;
 
-use crate::handler::EthereumHandlerClient;
+use crate::ethereum_handler::EthereumHandlerClient;
 use crate::warpdrive::WarpdriveClient;
 
 const MAINNET_PASSPHRASE: &str = "Public Global Stellar Network ; September 2015";
