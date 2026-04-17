@@ -66,7 +66,7 @@ pub struct SignatureData {
 }
 
 impl SignatureData {
-    fn into_scval(self) -> Result<ScVal, SorobanHelperError> {
+    pub(crate) fn into_scval(self) -> Result<ScVal, SorobanHelperError> {
         // Contract struct ScVal::Map keys must be sorted alphabetically.
         struct_map(vec![
             ("reference_block", ScVal::U32(self.reference_block)),
