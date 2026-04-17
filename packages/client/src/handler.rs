@@ -1,5 +1,8 @@
-use soroban_rs::xdr::ScVal;
-use soroban_rs::{Account, ClientContractConfigs, ContractId, Env, EnvConfigs, Signer};
+use soroban_rs::xdr::{AccountId, ScAddress, ScVal};
+use soroban_rs::{
+    Account, ClientContractConfigs, ContractId, Env, EnvConfigs, IntoScVal, Signer,
+    SorobanHelperError, SorobanTransactionResponse,
+};
 
 use crate::utils::{execute, query};
 pub struct EthereumHandlerClient {
@@ -15,9 +18,9 @@ impl EthereumHandlerClient {
 
     pub async fn verify_eth(
         &mut self,
-        envelope_bytes: soroban_rs::xdr::ScVal,
-        sig_data: soroban_rs::xdr::ScVal,
-    ) -> Result<soroban_rs::SorobanTransactionResponse, soroban_rs::SorobanHelperError> {
+        envelope_bytes: ScVal,
+        sig_data: ScVal,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
         execute(
             &mut self.client_configs,
             "verify_eth",
@@ -28,9 +31,9 @@ impl EthereumHandlerClient {
 
     pub async fn upgrade(
         &mut self,
-        new_wasm_hash: soroban_rs::xdr::ScVal,
-        new_version: soroban_rs::xdr::ScVal,
-    ) -> Result<soroban_rs::SorobanTransactionResponse, soroban_rs::SorobanHelperError> {
+        new_wasm_hash: ScVal,
+        new_version: ScVal,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
         execute(
             &mut self.client_configs,
             "upgrade",
@@ -39,39 +42,39 @@ impl EthereumHandlerClient {
         .await
     }
 
-    pub async fn propose_admin(
-        &mut self,
-        new_admin: soroban_rs::xdr::ScVal,
-    ) -> Result<soroban_rs::SorobanTransactionResponse, soroban_rs::SorobanHelperError> {
-        execute(&mut self.client_configs, "propose_admin", vec![new_admin]).await
+    pub async fn propose_admin(&mut self, new_admin: AccountId) -> Result<(), SorobanHelperError> {
+        let args = vec![new_admin.into_val()];
+        execute(&mut self.client_configs, "propose_admin", args).await?;
+        Ok(())
     }
 
-    pub async fn accept_admin(
-        &mut self,
-    ) -> Result<soroban_rs::SorobanTransactionResponse, soroban_rs::SorobanHelperError> {
-        execute(&mut self.client_configs, "accept_admin", vec![]).await
+    pub async fn accept_admin(&mut self) -> Result<(), SorobanHelperError> {
+        execute(&mut self.client_configs, "accept_admin", vec![]).await?;
+        Ok(())
     }
 
-    pub async fn admin(&mut self) -> Result<Vec<ScVal>, soroban_rs::SorobanHelperError> {
-        query(&mut self.client_configs, "admin", vec![]).await
+    pub async fn admin(&mut self) -> Result<AccountId, SorobanHelperError> {
+        let res = query(&mut self.client_configs, "admin", vec![]).await?;
+        if let Some(ScVal::Address(ScAddress::Account(account_id))) = res {
+            return Ok(account_id);
+        }
+        Err(SorobanHelperError::TransactionSimulationFailed(format!(
+            "Unexpected result: {:?}",
+            res
+        )))
     }
 
-    pub async fn pending_admin(&mut self) -> Result<Vec<ScVal>, soroban_rs::SorobanHelperError> {
+    pub async fn pending_admin(&mut self) -> Result<Option<ScVal>, SorobanHelperError> {
         query(&mut self.client_configs, "pending_admin", vec![]).await
     }
 
-    pub async fn version(&mut self) -> Result<Vec<ScVal>, soroban_rs::SorobanHelperError> {
+    pub async fn version(&mut self) -> Result<Option<ScVal>, SorobanHelperError> {
         query(&mut self.client_configs, "version", vec![]).await
     }
-    pub async fn verification_contract(
-        &mut self,
-    ) -> Result<Vec<ScVal>, soroban_rs::SorobanHelperError> {
+    pub async fn verification_contract(&mut self) -> Result<Option<ScVal>, SorobanHelperError> {
         query(&mut self.client_configs, "verification_contract", vec![]).await
     }
-    pub async fn payload(
-        &mut self,
-        event_id: soroban_rs::xdr::ScVal,
-    ) -> Result<Vec<ScVal>, soroban_rs::SorobanHelperError> {
+    pub async fn payload(&mut self, event_id: ScVal) -> Result<Option<ScVal>, SorobanHelperError> {
         query(&mut self.client_configs, "payload", vec![event_id]).await
     }
 }

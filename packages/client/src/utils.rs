@@ -14,7 +14,7 @@ pub async fn query(
     cfg: &mut ClientContractConfigs,
     function_name: &str,
     args: Vec<ScVal>,
-) -> Result<Vec<ScVal>, SorobanHelperError> {
+) -> Result<Option<ScVal>, SorobanHelperError> {
     let (results, _) = simulate_tx(cfg, function_name, args).await?;
     Ok(results)
 }
@@ -58,7 +58,7 @@ async fn simulate_tx(
     cfg: &mut ClientContractConfigs,
     function_name: &str,
     args: Vec<ScVal>,
-) -> Result<(Vec<ScVal>, Transaction), SorobanHelperError> {
+) -> Result<(Option<ScVal>, Transaction), SorobanHelperError> {
     let mut tx = build_tx(cfg, function_name, args).await?;
 
     let tx_envelope = TransactionEnvelope::Tx(TransactionV1Envelope {
@@ -95,7 +95,7 @@ async fn simulate_tx(
     );
     tx.fee = updated_fee;
 
-    // Get results
-    let vals = sim_results.into_iter().map(|r| r.xdr).collect();
-    Ok((vals, tx))
+    // I assume those are also subcall results, we just return the top-level result which is what we get on a real call
+    let val = sim_results.first().map(|r| r.xdr.clone());
+    Ok((val, tx))
 }
