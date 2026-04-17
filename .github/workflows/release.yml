@@ -44,7 +44,7 @@ jobs:
           sha256sum warpdrive_*.wasm > checksums.txt
       - name: Create GitHub release
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create ${{ github.ref_name }}
           target/wasm32v1-none/release/warpdrive_*.wasm
