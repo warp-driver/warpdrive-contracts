@@ -1,10 +1,17 @@
-use soroban_rs::xdr::{AccountId, ScAddress, ScVal};
-use soroban_rs::{
-    Account, ClientContractConfigs, ContractId, Env, EnvConfigs, IntoScVal, Signer,
-    SorobanHelperError, SorobanTransactionResponse,
+use soroban_rs::xdr::{
+    BytesM, ContractId as XdrContractId, Hash, ScAddress, ScBytes, ScMap, ScMapEntry, ScString,
+    ScSymbol, ScVal, ScVec, StringM, VecM,
 };
+use soroban_rs::{ContractId, IntoScVal, SorobanHelperError, SorobanTransactionResponse};
 
 use crate::utils::{execute, query};
+
+pub struct SignatureData {
+    pub signers: Vec<[u8; 33]>,
+    pub signatures: Vec<[u8; 65]>,
+    pub reference_block: u32,
+}
+
 pub struct EthereumHandlerClient {
     client_configs: soroban_rs::ClientContractConfigs,
 }
@@ -18,32 +25,27 @@ impl EthereumHandlerClient {
 
     pub async fn verify_eth(
         &mut self,
-        envelope_bytes: ScVal,
-        sig_data: ScVal,
+        envelope_bytes: Vec<u8>,
+        sig_data: SignatureData,
     ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
-        execute(
-            &mut self.client_configs,
-            "verify_eth",
-            vec![envelope_bytes, sig_data],
-        )
-        .await
+        let args = vec![
+            bytes_to_scval(&envelope_bytes)?,
+            sig_data_to_scval(&sig_data)?,
+        ];
+        execute(&mut self.client_configs, "verify_eth", args).await
     }
 
     pub async fn upgrade(
         &mut self,
-        new_wasm_hash: ScVal,
-        new_version: ScVal,
+        new_wasm_hash: [u8; 32],
+        new_version: String,
     ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
-        execute(
-            &mut self.client_configs,
-            "upgrade",
-            vec![new_wasm_hash, new_version],
-        )
-        .await
+        let args = vec![new_wasm_hash.into_val(), new_version.into_val()];
+        execute(&mut self.client_configs, "upgrade", args).await
     }
 
-    pub async fn propose_admin(&mut self, new_admin: AccountId) -> Result<(), SorobanHelperError> {
-        let args = vec![new_admin.into_val()];
+    pub async fn propose_admin(&mut self, new_admin: ScAddress) -> Result<(), SorobanHelperError> {
+        let args = vec![ScVal::Address(new_admin)];
         execute(&mut self.client_configs, "propose_admin", args).await?;
         Ok(())
     }
@@ -53,90 +55,106 @@ impl EthereumHandlerClient {
         Ok(())
     }
 
-    pub async fn admin(&mut self) -> Result<AccountId, SorobanHelperError> {
-        let res = query(&mut self.client_configs, "admin", vec![]).await?;
-        if let Some(ScVal::Address(ScAddress::Account(account_id))) = res {
-            return Ok(account_id);
+    pub async fn admin(&self) -> Result<ScAddress, SorobanHelperError> {
+        let res = query(&self.client_configs, "admin", vec![]).await?;
+        if let ScVal::Address(address) = res {
+            return Ok(address);
         }
-        Err(SorobanHelperError::TransactionSimulationFailed(format!(
-            "Unexpected result: {:?}",
-            res
-        )))
+        Err(unexpected(&res))
     }
 
-    pub async fn pending_admin(&mut self) -> Result<Option<ScVal>, SorobanHelperError> {
-        query(&mut self.client_configs, "pending_admin", vec![]).await
+    pub async fn pending_admin(&self) -> Result<Option<ScAddress>, SorobanHelperError> {
+        let res = query(&self.client_configs, "pending_admin", vec![]).await?;
+        match res {
+            ScVal::Void => Ok(None),
+            ScVal::Address(address) => Ok(Some(address)),
+            other => Err(unexpected(&other)),
+        }
     }
 
-    pub async fn version(&mut self) -> Result<Option<ScVal>, SorobanHelperError> {
-        query(&mut self.client_configs, "version", vec![]).await
+    pub async fn version(&self) -> Result<String, SorobanHelperError> {
+        let res = query(&self.client_configs, "version", vec![]).await?;
+        if let ScVal::String(ScString(ref s)) = res {
+            return String::from_utf8(s.as_vec().clone()).map_err(|_| {
+                SorobanHelperError::XdrEncodingFailed("version not utf-8".to_string())
+            });
+        }
+        Err(unexpected(&res))
     }
-    pub async fn verification_contract(&mut self) -> Result<Option<ScVal>, SorobanHelperError> {
-        query(&mut self.client_configs, "verification_contract", vec![]).await
+
+    pub async fn verification_contract(&self) -> Result<ContractId, SorobanHelperError> {
+        let res = query(&self.client_configs, "verification_contract", vec![]).await?;
+        if let ScVal::Address(ScAddress::Contract(XdrContractId(Hash(bytes)))) = res {
+            return Ok(ContractId(bytes));
+        }
+        Err(unexpected(&res))
     }
-    pub async fn payload(&mut self, event_id: ScVal) -> Result<Option<ScVal>, SorobanHelperError> {
-        query(&mut self.client_configs, "payload", vec![event_id]).await
+
+    pub async fn payload(&self, event_id: [u8; 20]) -> Result<Option<Vec<u8>>, SorobanHelperError> {
+        let res = query(
+            &self.client_configs,
+            "payload",
+            vec![bytes_to_scval(&event_id)?],
+        )
+        .await?;
+        match res {
+            ScVal::Void => Ok(None),
+            ScVal::Bytes(ScBytes(ref bm)) => Ok(Some(bm.to_vec())),
+            other => Err(unexpected(&other)),
+        }
     }
 }
 
-const MAINNET_PASSPHRASE: &str = "Public Global Stellar Network ; September 2015";
-
-use ed25519_dalek::SigningKey;
-use stellar_strkey::ed25519::PrivateKey;
-
-#[allow(dead_code)]
-pub fn mock_signer1() -> Signer {
-    let pk = PrivateKey::from_string("SD3C2X7WPTUYX4YHL2G34PX75JZ35QJDFKM6SXDLYHWIPOWPIQUXFVLE")
-        .unwrap();
-    Signer::new(SigningKey::from_bytes(&pk.0))
+fn unexpected(res: &ScVal) -> SorobanHelperError {
+    SorobanHelperError::TransactionSimulationFailed(format!("Unexpected result: {:?}", res))
 }
 
-pub async fn demo_query(env_config: EnvConfigs, contract_id: ContractId) {
-    let env = Env::new(env_config).unwrap();
-
-    // TODO: any placeholder for queries (invalid key)
-    let account = Account::single(Signer::new(SigningKey::from_bytes(&[1; 32])));
-
-    let cfg: ClientContractConfigs = ClientContractConfigs {
-        contract_id,
-        env,
-        source_account: account,
-    };
-
-    let mut hc = EthereumHandlerClient::new(&cfg);
-    let ver = hc.version().await.unwrap();
-    println!("{:?}", ver)
+fn bytes_to_scval(b: &[u8]) -> Result<ScVal, SorobanHelperError> {
+    let bm = BytesM::<{ u32::MAX }>::try_from(b)
+        .map_err(|_| SorobanHelperError::XdrEncodingFailed("bytes too long".to_string()))?;
+    Ok(ScVal::Bytes(ScBytes::from(bm)))
 }
 
-pub async fn demo_execute(env_config: EnvConfigs, contract_id: ContractId, account: Account) {
-    let env = Env::new(env_config).unwrap();
-
-    let cfg: ClientContractConfigs = ClientContractConfigs {
-        contract_id,
-        env,
-        source_account: account,
-    };
-
-    let mut hc = EthereumHandlerClient::new(&cfg);
-    let ver = hc.version().await.unwrap();
-    println!("{:?}", ver)
+fn vec_to_scval(v: Vec<ScVal>) -> Result<ScVal, SorobanHelperError> {
+    let vm = VecM::try_from(v)
+        .map_err(|_| SorobanHelperError::XdrEncodingFailed("vec too long".to_string()))?;
+    Ok(ScVal::Vec(Some(ScVec::from(vm))))
 }
 
-pub async fn demo_main() {
-    let rpc_url = std::env::var("XLM_RPC_URL").unwrap();
-    let contract_str = std::env::var("XLM_CONTRACT").unwrap();
+fn symbol(key: &str) -> Result<ScVal, SorobanHelperError> {
+    let sm = StringM::<32>::try_from(key)
+        .map_err(|_| SorobanHelperError::XdrEncodingFailed("symbol too long".to_string()))?;
+    Ok(ScVal::Symbol(ScSymbol(sm)))
+}
 
-    let contract_id = ContractId::from_string(&contract_str).unwrap();
+fn sig_data_to_scval(sig: &SignatureData) -> Result<ScVal, SorobanHelperError> {
+    let signers: Vec<ScVal> = sig
+        .signers
+        .iter()
+        .map(|s| bytes_to_scval(s))
+        .collect::<Result<_, _>>()?;
+    let signatures: Vec<ScVal> = sig
+        .signatures
+        .iter()
+        .map(|s| bytes_to_scval(s))
+        .collect::<Result<_, _>>()?;
 
-    let env_config = EnvConfigs {
-        rpc_url: rpc_url.clone(),
-        network_passphrase: MAINNET_PASSPHRASE.to_string(),
-    };
-
-    demo_query(env_config.clone(), contract_id).await;
-
-    // TODO: use real account to sign
-    let account = Account::single(mock_signer1());
-
-    demo_execute(env_config.clone(), contract_id, account).await;
+    // Contract struct ScVal::Map keys must be sorted alphabetically by field name.
+    let entries = vec![
+        ScMapEntry {
+            key: symbol("reference_block")?,
+            val: ScVal::U32(sig.reference_block),
+        },
+        ScMapEntry {
+            key: symbol("signatures")?,
+            val: vec_to_scval(signatures)?,
+        },
+        ScMapEntry {
+            key: symbol("signers")?,
+            val: vec_to_scval(signers)?,
+        },
+    ];
+    let vm = VecM::try_from(entries)
+        .map_err(|_| SorobanHelperError::XdrEncodingFailed("map too long".to_string()))?;
+    Ok(ScVal::Map(Some(ScMap(vm))))
 }
