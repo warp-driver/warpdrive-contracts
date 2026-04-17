@@ -5,7 +5,7 @@
 #   docker build -t warpdrive-stellar-middleware:dev -f docker/middleware/Dockerfile .
 FROM rust:1.94-bookworm AS builder
 
-ARG STELLAR_CLI_VERSION=23.4.1
+ARG STELLAR_CLI_VERSION=26.0.0
 
 # stellar-cli binary is dynamically linked to libdbus (pulled in via hidapi).
 RUN apt-get update \

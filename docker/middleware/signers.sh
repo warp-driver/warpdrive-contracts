@@ -29,8 +29,8 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-require_env RPC_URL NETWORK_PASSPHRASE DEPLOYER_SECRET
-ensure_deployer_key
+require_env RPC_URL NETWORK_PASSPHRASE
+resolve_deployer
 
 [ -n "$DEPLOY_FILE" ] || die "--deploy-file is required"
 [ -r "$DEPLOY_FILE" ] || die "deploy file not readable: $DEPLOY_FILE"
@@ -42,15 +42,13 @@ case "$SCHEME" in
     *)         die "invalid --scheme: $SCHEME (want secp256k1|ed25519)" ;;
 esac
 
-# shellcheck disable=SC2086
-NET_FLAGS=$(stellar_network_flags)
+set_net_flags
 
 invoke() {
-    # shellcheck disable=SC2086
     retry stellar contract invoke \
         --id "$SECURITY_ID" \
-        --source "$KEY_ALIAS" \
-        $NET_FLAGS \
+        --source "$DEPLOY_SOURCE" \
+        "${NET_FLAGS[@]}" \
         --inclusion-fee "$INCLUSION_FEE" \
         -- \
         "$@"

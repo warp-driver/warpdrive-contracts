@@ -17,13 +17,29 @@ The builder stage installs `stellar-cli`, compiles the seven contracts to
 
 ## Run
 
-Start a long-lived container and issue commands via `docker exec`:
+Start a long-lived container and issue commands via `docker exec`.
+
+**Testnet / futurenet (managed)** — container generates + friendbot-funds a
+throwaway identity on first use:
 
 ```bash
 docker run -d --name wdm \
   -e RPC_URL=https://soroban-testnet.stellar.org \
   -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
+  -v $PWD/out:/out \
+  warpdrive-stellar-middleware:dev
+```
+
+**Mainnet / BYOK** — friendbot doesn't exist, so you must bring a funded key.
+Provide the secret and its G... address; the secret is used as `--source`
+directly (no identity import):
+
+```bash
+docker run -d --name wdm \
+  -e RPC_URL=https://soroban.stellar.org:443 \
+  -e NETWORK_PASSPHRASE="Public Global Stellar Network ; September 2015" \
   -e DEPLOYER_SECRET="S..." \
+  -e DEPLOYER_ADDRESS="G..." \
   -v $PWD/out:/out \
   warpdrive-stellar-middleware:dev
 ```
@@ -59,7 +75,10 @@ docker exec wdm /warpdrive/cli.sh set-threshold \
 |---|---|---|
 | `RPC_URL` | all subcommands that hit the network | e.g. `https://soroban-testnet.stellar.org` |
 | `NETWORK_PASSPHRASE` | deploy / signers | e.g. `Test SDF Network ; September 2015` |
-| `DEPLOYER_SECRET` | deploy / signers | Stellar secret seed (`S...`) used as admin. |
+| `DEPLOYER_SECRET` | deploy / signers (BYOK) | Stellar secret seed (`S...`). If unset, container generates + friendbot-funds one on `$FUND_NETWORK`. |
+| `DEPLOYER_ADDRESS` | deploy / signers (BYOK) | Required if `DEPLOYER_SECRET` is set. The G... address matching the secret. |
+| `FUND_NETWORK` | managed mode (optional) | stellar-cli network alias used for `keys generate --fund`. Default `testnet`. Ignored when BYOK. |
+| `KEY_ALIAS` | managed mode (optional) | stellar-cli identity alias for the generated key. Default `warpdrive-deployer`. |
 | `PROJECT_SPEC_REPO` | deploy (optional) | URL written into project-root at init. Default: warp-driver/warpdrive-contracts. |
 | `SECP_THRESHOLD_NUM` / `SECP_THRESHOLD_DEN` | deploy (optional) | Initial threshold on secp256k1 security. Default `2/3`. |
 | `ED_THRESHOLD_NUM` / `ED_THRESHOLD_DEN` | deploy (optional) | Initial threshold on ed25519 security. Default `2/3`. |

@@ -5,6 +5,7 @@ set -euo pipefail
 
 WASM_DIR="${WASM_DIR:-/warpdrive/wasm}"
 KEY_ALIAS="${KEY_ALIAS:-warpdrive-deployer}"
+FUND_NETWORK="${FUND_NETWORK:-testnet}"
 MAX_RETRIES="${MAX_RETRIES:-3}"
 RETRY_SLEEP_SECONDS="${RETRY_SLEEP_SECONDS:-5}"
 INCLUSION_FEE="${INCLUSION_FEE:-10000000}"
@@ -36,21 +37,43 @@ retry() {
     return 1
 }
 
-# Imports $DEPLOYER_SECRET into stellar-cli under $KEY_ALIAS.
-# Idempotent: safe to call multiple times in the same container.
-ensure_deployer_key() {
-    require_env DEPLOYER_SECRET
-    if stellar keys address "$KEY_ALIAS" >/dev/null 2>&1; then
+# Resolves the deployer identity and sets two globals for the caller:
+#   DEPLOY_SOURCE   - value passed to `stellar ... --source` (alias or raw secret)
+#   ADMIN_ADDRESS   - G... used as the `--admin` arg for contract constructors
+#
+# Two modes:
+#   * BYOK (mainnet, anywhere without friendbot):
+#     caller sets DEPLOYER_SECRET (S...) and DEPLOYER_ADDRESS (G...).
+#     The raw secret is passed straight to stellar --source; no key import.
+#   * Managed (testnet/futurenet):
+#     no secret set. Generates + friendbot-funds $KEY_ALIAS on $FUND_NETWORK
+#     on first call, then reuses it. Idempotent across invocations as long as
+#     stellar-cli's identity dir persists (mount a volume to keep it across
+#     `docker run --rm` cycles).
+resolve_deployer() {
+    if [ -n "${DEPLOYER_SECRET:-}" ]; then
+        require_env DEPLOYER_ADDRESS
+        DEPLOY_SOURCE="$DEPLOYER_SECRET"
+        ADMIN_ADDRESS="$DEPLOYER_ADDRESS"
         return 0
     fi
-    stellar keys add "$KEY_ALIAS" --secret-key <<<"$DEPLOYER_SECRET" >/dev/null
+    if ! stellar keys address "$KEY_ALIAS" >/dev/null 2>&1; then
+        echo "==> generating + funding identity '$KEY_ALIAS' on '$FUND_NETWORK'" >&2
+        stellar keys generate "$KEY_ALIAS" --network "$FUND_NETWORK" --fund >/dev/null
+    fi
+    DEPLOY_SOURCE="$KEY_ALIAS"
+    ADMIN_ADDRESS=$(stellar keys address "$KEY_ALIAS")
 }
 
-# Echoes the stellar network flags common to deploy + invoke.
-stellar_network_flags() {
+# Populates the NET_FLAGS bash array with the stellar network flags. Callers
+# expand it quoted: `stellar contract deploy ... "${NET_FLAGS[@]}" ...`.
+#
+# Uses an array instead of a printed string so values with whitespace (such
+# as NETWORK_PASSPHRASE="Test SDF Network ; September 2015") aren't split by
+# word-splitting when the helper's output is re-expanded.
+set_net_flags() {
     require_env RPC_URL NETWORK_PASSPHRASE
-    printf -- '--rpc-url %s --network-passphrase %s' \
-        "$RPC_URL" "$NETWORK_PASSPHRASE"
+    NET_FLAGS=(--rpc-url "$RPC_URL" --network-passphrase "$NETWORK_PASSPHRASE")
 }
 
 # Fetches current ledger sequence from RPC.
