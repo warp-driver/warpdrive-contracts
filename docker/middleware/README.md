@@ -106,3 +106,72 @@ docker exec wdm /warpdrive/cli.sh set-threshold \
   }
 }
 ```
+
+## Smoke testing on testnet
+
+`smoke.sh` is a host-side wrapper that mounts `./out/` at `/out` and persists
+the generated identity under `./out/.keys/` so the same admin is reused across
+`docker run --rm` invocations. Run it from the repository root.
+
+### 1. Deploy
+
+```bash
+./docker/middleware/smoke.sh deploy --output-path /out/deploy.json
+jq . out/deploy.json
+```
+
+First run generates + friendbot-funds `warpdrive-deployer` on testnet; later
+runs reuse it. Expect 7 contract IDs plus `admin`, `rpc_url`, `network_passphrase`.
+
+### 2. Ledger probe
+
+```bash
+./docker/middleware/smoke.sh get-ledger
+```
+
+Should print the current ledger sequence (a decimal integer). Confirms RPC
+connectivity without touching the deployed contracts.
+
+### 3. Signer ops round-trip
+
+Uses real keypairs from the repo's `test-vectors` helper so the bytes are valid:
+
+```bash
+eval "$(cargo run -p test-vectors 2>/dev/null)"
+
+./docker/middleware/smoke.sh add-signer \
+  --scheme secp256k1 --key "$SIGNER1_PUBKEY" --weight 100 \
+  --deploy-file /out/deploy.json
+
+./docker/middleware/smoke.sh add-signer \
+  --scheme ed25519 --key "$ED_SIGNER1_PUBKEY" --weight 100 \
+  --deploy-file /out/deploy.json
+
+./docker/middleware/smoke.sh set-threshold \
+  --scheme secp256k1 --numerator 1 --denominator 2 \
+  --deploy-file /out/deploy.json
+
+./docker/middleware/smoke.sh remove-signer \
+  --scheme secp256k1 --key "$SIGNER1_PUBKEY" \
+  --deploy-file /out/deploy.json
+```
+
+Each call should print a transaction hash with no error.
+
+### 4. Cross-check admin against a deployed contract
+
+```bash
+PROJECT_ROOT=$(jq -r .contracts.project_root out/deploy.json)
+docker run --rm \
+  -v $PWD/out/.keys:/root/.config/soroban \
+  warpdrive-stellar-middleware:dev \
+  stellar contract invoke \
+    --id "$PROJECT_ROOT" \
+    --source warpdrive-deployer \
+    --rpc-url https://soroban-testnet.stellar.org \
+    --network-passphrase "Test SDF Network ; September 2015" \
+    --send no \
+    -- admin
+```
+
+Should print the same G... as `jq -r .admin out/deploy.json`.
