@@ -6,6 +6,7 @@ use warpdrive_client::loader::testnet;
 
 use warpdrive_client::ethereum_handler::EthereumHandlerClient;
 use warpdrive_client::project_root::ProjectRootClient;
+use warpdrive_client::secp256k1_security::Secp256k1SecurityClient;
 use warpdrive_client::secp256k1_verification::Secp256k1VerificationClient;
 
 const TESTNET_RPC: &str = "https://soroban-testnet.stellar.org";
@@ -41,6 +42,15 @@ async fn main() {
     assert_eq!(ver, cfg.secp256k1_verification);
 
     // TODO: Query the Security Contract
+    client.contract_id = cfg.secp256k1_security;
+    let sec_client = Secp256k1SecurityClient::new(client.clone());
+    let total = sec_client.get_total_weight().await.unwrap();
+    println!("Total Weight: {}", total);
+    let signers = sec_client.list_signers().await.unwrap();
+    println!("Signers:");
+    for s in &signers {
+        println!("  {}", s);
+    }
 
     // Check in the verification contract
     client.contract_id = cfg.secp256k1_verification;
@@ -50,6 +60,11 @@ async fn main() {
     assert_eq!(sec, cfg.secp256k1_security);
     let required = ver_client.required_weight().await.unwrap();
     println!("Required Weight: {}", required);
+    for signer in signers.into_iter() {
+        let weight = ver_client.signer_weight(signer.key).await.unwrap();
+        assert_eq!(weight, signer.weight);
+    }
+    println!("signer_weight queries in verification match list_signers query in security\n");
 
     // Check in the handler
     client.contract_id = cfg.ethereum_handler;

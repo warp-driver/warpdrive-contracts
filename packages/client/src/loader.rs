@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
-pub const TESTNET_DIR: &'static str = "../../.testnet";
+pub const TESTNET_DIR: &str = "../../.testnet";
 
 #[derive(Clone, Debug)]
 pub struct DeployConfig {
