@@ -110,9 +110,11 @@ pub fn symbol(key: &str) -> Result<ScVal, SorobanHelperError> {
     Ok(ScVal::Symbol(ScSymbol(sm)))
 }
 
-/// Encode a contract struct as `ScVal::Map`. Entries must be provided in the
-/// alphabetical field-name order the Soroban host expects.
-pub fn struct_map(entries: Vec<(&str, ScVal)>) -> Result<ScVal, SorobanHelperError> {
+/// Encode a contract struct as `ScVal::Map`.
+pub(crate) fn struct_map(mut entries: Vec<(&str, ScVal)>) -> Result<ScVal, SorobanHelperError> {
+    // Entries must be provided to Soroban in alphabetical field-name order
+    entries.sort_by_key(|v| v.0);
+
     let map_entries: Vec<ScMapEntry> = entries
         .into_iter()
         .map(|(k, v)| {

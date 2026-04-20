@@ -48,9 +48,14 @@ async fn main() {
     };
 
     // Query the Project Root to ensure we are admin
-    let pr_client = ProjectRootClient::new(client.clone());
+    let mut pr_client = ProjectRootClient::new(client.clone());
     let admin = pr_client.admin().await.unwrap();
     println!("Project Admin {}", admin);
+    println!("Proposing self-change");
+    pr_client
+        .propose_admin(&account.account_id().to_string())
+        .await
+        .unwrap();
 
     client.contract_id = cfg.secp256k1_security;
     let mut sec_client = Secp256k1SecurityClient::new(client.clone());

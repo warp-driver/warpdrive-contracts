@@ -102,7 +102,18 @@ pub async fn execute(
     let signed = cfg
         .source_account
         .sign_transaction(&tx, &env.network_id())?;
-    env.send_transaction(&signed).await
+
+    // Sometimes this fails due to network load, try 3 times for a success
+    let mut res = Err(SorobanHelperError::NotSupported("Placeholder".to_string()));
+    for _ in 0..3 {
+        res = env.send_transaction(&signed).await;
+        if res.is_ok() {
+            break;
+        } else {
+            println!("[WARN] execute: {:?}", &res);
+        }
+    }
+    res
 }
 
 fn attach_auth_from_simulation(

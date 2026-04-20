@@ -1,7 +1,7 @@
+use std::str::FromStr;
+
 use soroban_rs::xdr::{ScAddress, ScString, ScVal};
-use soroban_rs::{
-    ClientContractConfigs, IntoScVal, SorobanHelperError, SorobanTransactionResponse,
-};
+use soroban_rs::{ClientContractConfigs, IntoScVal, SorobanHelperError};
 
 use crate::utils::{execute, query, unexpected};
 
@@ -14,12 +14,14 @@ pub trait WarpdriveClient {
         &mut self,
         new_wasm_hash: [u8; 32],
         new_version: String,
-    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+    ) -> Result<(), SorobanHelperError> {
         let args = vec![new_wasm_hash.into_val(), new_version.into_val()];
-        execute(self.mut_client_configs(), "upgrade", args).await
+        execute(self.mut_client_configs(), "upgrade", args).await?;
+        Ok(())
     }
 
-    async fn propose_admin(&mut self, new_admin: ScAddress) -> Result<(), SorobanHelperError> {
+    async fn propose_admin(&mut self, new_admin: &str) -> Result<(), SorobanHelperError> {
+        let new_admin = ScAddress::from_str(new_admin)?;
         let args = vec![ScVal::Address(new_admin)];
         execute(self.mut_client_configs(), "propose_admin", args).await?;
         Ok(())

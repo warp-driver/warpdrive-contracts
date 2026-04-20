@@ -1,4 +1,3 @@
-pub mod demo;
 pub mod ethereum_handler;
 pub mod loader;
 pub mod project_root;
