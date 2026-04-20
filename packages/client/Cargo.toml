@@ -1,0 +1,23 @@
+[package]
+name = "warpdrive-client"
+description = "Soroban-rs clients for WarpDrive Stellar contracts"
+edition = "2024"
+version = "0.2.0-rc.6"
+license = "GPL-3.0-or-later"
+authors = ["WarpDrive"]
+repository = "https://github.com/warp-driver/warpdrive-contracts"
+rust-version = "1.90.0"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+ed25519-dalek = "2.2.0"
+soroban-rs = "0.2.6"
+soroban-rs-macros = "0.2.4"
+stellar-strkey = "0.0.16"
+tokio = { version = "1.52" }
+
+[dev-dependencies]
+soroban-sdk = "25.3.0"
+warpdrive-shared = { path = "../shared", features = ["testutils"] }

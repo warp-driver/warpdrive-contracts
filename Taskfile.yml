@@ -31,6 +31,7 @@ tasks:
     desc: Build all contracts to WASM
     cmds:
       - cargo build --target {{.WASM_TARGET}} --release
+      - cd packages/client && cargo build
 
   optimize:
     desc: Build contracts for deployment and optimize (uses stellar CLI for proper stripping)

@@ -5,6 +5,8 @@ members = [
     "packages/*",
     "tools/*",
 ]
+# This uses stdlib and must be compiled separately not to infect dependency trees
+exclude = ["packages/client"]
 default-members = [
     "contracts/*",
     "packages/*",
@@ -12,7 +14,7 @@ default-members = [
 
 [workspace.package]
 edition = "2024"
-version = "0.1.0"
+version = "0.2.0-rc.6"
 license = "GPL-3.0-or-later"
 authors = ["WarpDrive"]
 repository = "https://github.com/warp-driver/warpdrive-contracts"
@@ -20,6 +22,7 @@ rust-version = "1.90.0"
 
 [workspace.dependencies]
 soroban-sdk = "25.3.0"
+warpdrive-client = { path = "packages/client" }
 warpdrive-shared = { path = "packages/shared" }
 warpdrive-secp256k1-security = { path = "contracts/secp256k1-security" }
 warpdrive-secp256k1-verification = { path = "contracts/secp256k1-verification" }
