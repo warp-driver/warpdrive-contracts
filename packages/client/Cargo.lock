@@ -2652,6 +2652,7 @@ dependencies = [
  "soroban-rs-macros",
  "soroban-sdk",
  "stellar-strkey 0.0.16",
+ "tokio",
  "warpdrive-shared",
 ]
 
