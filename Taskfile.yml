@@ -83,7 +83,17 @@ tasks:
       - cargo check --all-targets
 
   publish:
+    desc: Publish to crates.io
+    deps: [publish-shared, publish-client]
+
+  publish-shared:
     desc: Publish warpdrive-shared to crates.io
     dir: '{{.ROOT_DIR}}/packages/shared'
+    cmds:
+      - cargo publish
+
+  publish-client:
+    desc: Publish warpdrive-client to crates.io
+    dir: '{{.ROOT_DIR}}/packages/client'
     cmds:
       - cargo publish
