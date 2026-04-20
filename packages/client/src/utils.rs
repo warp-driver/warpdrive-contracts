@@ -1,5 +1,6 @@
 use soroban_rs::xdr::{
-    ScVal, SorobanCredentials, Transaction, TransactionEnvelope, TransactionV1Envelope, VecM,
+    InvokeHostFunctionOp, OperationBody, ScVal, SorobanAuthorizationEntry, SorobanCredentials,
+    Transaction, TransactionEnvelope, TransactionExt, TransactionV1Envelope, VecM,
 };
 use soroban_rs::{
     ClientContractConfigs, Env, Operations, SorobanHelperError, SorobanTransactionResponse,
@@ -73,6 +74,19 @@ pub async fn execute(
         }
     }
 
+    // Attach the auth entries from the simulation to the invoke-host-function
+    // operations. Without this, require_auth() calls (e.g. admin checks) fail on
+    // the real network with TxMalformed even if the source account is authorized.
+    attach_auth_from_simulation(&mut tx, &sim_results)?;
+
+    // Attach the Soroban transaction data (resource footprint) from the
+    // simulation. The network requires this for any Soroban invocation; a tx
+    // with `ext: V0` is rejected as TxMalformed.
+    let tx_data = simulation.transaction_data().map_err(|e| {
+        SorobanHelperError::TransactionFailed(format!("Failed to get transaction data: {}", e))
+    })?;
+    tx.ext = TransactionExt::V1(tx_data);
+
     let updated_fee = DEFAULT_TRANSACTION_FEE.max(
         u32::try_from(
             (tx.operations.len() as u64 * DEFAULT_TRANSACTION_FEE as u64)
@@ -89,6 +103,36 @@ pub async fn execute(
         .source_account
         .sign_transaction(&tx, &env.network_id())?;
     env.send_transaction(&signed).await
+}
+
+fn attach_auth_from_simulation(
+    tx: &mut Transaction,
+    sim_results: &[soroban_rs::stellar_rpc_client::SimulateHostFunctionResult],
+) -> Result<(), SorobanHelperError> {
+    let mut ops: Vec<_> = tx.operations.iter().cloned().collect();
+    let mut result_idx = 0;
+    for op in ops.iter_mut() {
+        if let OperationBody::InvokeHostFunction(InvokeHostFunctionOp {
+            host_function,
+            auth,
+        }) = &mut op.body
+        {
+            let result = sim_results.get(result_idx).ok_or_else(|| {
+                SorobanHelperError::TransactionSimulationFailed(
+                    "simulation result count does not match operations".to_string(),
+                )
+            })?;
+            let entries: Vec<SorobanAuthorizationEntry> = result.auth.clone();
+            *auth = VecM::try_from(entries).map_err(|_| {
+                SorobanHelperError::XdrEncodingFailed("too many auth entries".to_string())
+            })?;
+            let _ = host_function;
+            result_idx += 1;
+        }
+    }
+    tx.operations = VecM::try_from(ops)
+        .map_err(|_| SorobanHelperError::XdrEncodingFailed("too many operations".to_string()))?;
+    Ok(())
 }
 
 async fn build_tx(

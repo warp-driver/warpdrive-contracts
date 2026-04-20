@@ -24,7 +24,7 @@ async fn main() {
         rpc_url: rpc_url.clone(),
         network_passphrase: TESTNET_PASSPHRASE.to_string(),
     };
-    // TODO: any placeholder for queries (invalid key)
+    // Placeholder for queries (invalid key)
     let account = Account::single(Signer::new(SigningKey::from_bytes(&[1; 32])));
 
     let mut client: ClientContractConfigs = ClientContractConfigs {
@@ -41,7 +41,7 @@ async fn main() {
     println!("Verification Contract {}", ver);
     assert_eq!(ver, cfg.secp256k1_verification);
 
-    // TODO: Query the Security Contract
+    // Query the Security Contract
     client.contract_id = cfg.secp256k1_security;
     let sec_client = Secp256k1SecurityClient::new(client.clone());
     let total = sec_client.get_total_weight().await.unwrap();
