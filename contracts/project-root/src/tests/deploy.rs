@@ -1,7 +1,8 @@
 extern crate std;
 
 use super::setup::{deploy_contract, install_contract_wasm};
-use soroban_sdk::{Env, String};
+use soroban_sdk::testutils::Events as _;
+use soroban_sdk::{Env, IntoVal, Map, String, Symbol, Val, vec};
 
 #[test]
 fn test_deploy() {
@@ -57,6 +58,23 @@ fn test_update_project_spec_repo() {
 
     let new_repo = String::from_str(&env, "https://github.com/example/spec-v2");
     client.update_project_spec_repo(&new_repo);
+
+    let got = env.events().all();
+    assert_eq!(
+        got,
+        vec![
+            &env,
+            (
+                client.address.clone(),
+                (Symbol::new(&env, "updated_spec_repo"),).into_val(&env),
+                Map::<Symbol, Val>::from_array(
+                    &env,
+                    [(Symbol::new(&env, "repo"), new_repo.clone().into_val(&env))]
+                )
+                .into_val(&env),
+            ),
+        ]
+    );
 
     assert_eq!(client.project_spec_repo(), new_repo);
 }

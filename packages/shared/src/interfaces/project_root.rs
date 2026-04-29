@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Env, String, contractclient, contracttype};
+use soroban_sdk::{Address, Env, String, contractclient, contractevent, contracttype};
 
 use super::warpdrive::WarpDriveInterface;
 
@@ -25,6 +25,19 @@ pub enum VerificationType {
     Ethereum = 1,
     /// Ed25519 / SEP-0053 / XDR — Soroban-native format.
     Stellar = 2,
+}
+
+// ── Shared events ───────────────────────────────────────────────────
+
+#[contractevent]
+pub struct UpdatedSpecRepo {
+    pub repo: String,
+}
+
+impl UpdatedSpecRepo {
+    pub fn new(repo: String) -> Self {
+        Self { repo }
+    }
 }
 
 // ── Interface trait (compile-time contract conformance) ──────────────
