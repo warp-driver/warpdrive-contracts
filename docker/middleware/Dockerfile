@@ -6,6 +6,8 @@
 FROM rust:1.94-bookworm AS builder
 
 ARG STELLAR_CLI_VERSION=26.0.0
+# Set automatically by BuildKit; resolved per build platform (amd64 / arm64).
+ARG TARGETARCH
 
 # stellar-cli binary is dynamically linked to libdbus (pulled in via hidapi).
 RUN apt-get update \
@@ -18,9 +20,14 @@ RUN curl -sSL https://taskfile.dev/install.sh \
     | sh -s -- -d -b /usr/local/bin
 
 # Install stellar-cli from the prebuilt release tarball so we don't have to
-# compile its hidapi/dbus dependencies from source.
-RUN curl -fsSL -o /tmp/stellar-cli.tar.gz \
-        "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+# compile its hidapi/dbus dependencies from source
+RUN case "$TARGETARCH" in \
+        amd64) STELLAR_TRIPLE="x86_64-unknown-linux-gnu" ;; \
+        arm64) STELLAR_TRIPLE="aarch64-unknown-linux-gnu" ;; \
+        *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/stellar-cli.tar.gz \
+        "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-${STELLAR_TRIPLE}.tar.gz" \
     && tar -xzf /tmp/stellar-cli.tar.gz -C /usr/local/bin stellar \
     && rm /tmp/stellar-cli.tar.gz \
     && stellar --version
