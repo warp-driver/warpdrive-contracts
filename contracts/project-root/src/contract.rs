@@ -1,7 +1,7 @@
 use soroban_sdk::{Address, BytesN, Env, String, contract, contractimpl};
 
 use warpdrive_shared::interfaces::{
-    project_root::ProjectRootInterface,
+    project_root::{ProjectRootInterface, UpdatedSpecRepo},
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
@@ -69,6 +69,7 @@ impl ProjectRootInterface for ProjectRoot {
     fn update_project_spec_repo(env: Env, repo: String) {
         storage::get_admin(&env).require_auth();
         storage::set_project_spec_repo(&env, &repo);
+        UpdatedSpecRepo::new(repo).publish(&env);
     }
 
     fn security_contract(env: Env) -> Address {
