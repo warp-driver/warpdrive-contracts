@@ -2650,7 +2650,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-client"
-version = "0.2.0-rc.6"
+version = "0.2.0"
 dependencies = [
  "ed25519-dalek",
  "soroban-rs",
@@ -2663,7 +2663,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-shared"
-version = "0.2.0-rc.6"
+version = "0.2.0"
 dependencies = [
  "ed25519-dalek",
  "k256",

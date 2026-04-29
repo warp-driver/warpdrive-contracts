@@ -2,7 +2,7 @@
 name = "warpdrive-client"
 description = "Soroban-rs clients for WarpDrive Stellar contracts"
 edition = "2024"
-version = "0.2.0-rc.6"
+version = "0.2.0"
 license = "GPL-3.0-or-later"
 authors = ["WarpDrive"]
 repository = "https://github.com/warp-driver/warpdrive-contracts"
