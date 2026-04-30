@@ -17,6 +17,28 @@ Handler --> Verification --> Security
 - **Handler** is the entry point for envelopes from a remote chain. It decodes the payload, enforces replay protection, and delegates cryptographic validation to the Verification contract.
 - **Project Root** is the root governance contract for a WarpDrive project, controlled by the project's admin. It points to either the secp256k1 / Ethereum stack or the ed25519 / Stellar stack.
 
+## Contracts and Packages
+
+### Contracts
+
+| Contract | Description |
+|----------|-------------|
+| [Ethereum Handler](./contracts/ethereum-handler/) | Entry point for envelopes originating from Ethereum-compatible chains; ABI-decodes payloads, enforces replay protection, and delegates to the secp256k1 verification contract |
+| [Stellar Handler](./contracts/stellar-handler/) | Entry point for envelopes originating from Stellar; decodes payloads, enforces replay protection, and delegates to the ed25519 verification contract |
+| [secp256k1 Security](./contracts/secp256k1-security/) | Proof-of-Authority registry of secp256k1 signers with weighted keys and configurable verification thresholds |
+| [ed25519 Security](./contracts/ed25519-security/) | Proof-of-Authority registry of ed25519 signers with weighted keys and configurable verification thresholds |
+| [secp256k1 Verification](./contracts/secp256k1-verification/) | EIP-191 secp256k1 signature verification against the secp256k1 Security contract's signer set |
+| [ed25519 Verification](./contracts/ed25519-verification/) | ed25519 signature verification against the ed25519 Security contract's signer set |
+| [Project Root](./contracts/project-root/) | Minimal root governance contract for a WarpDrive project - references contract and URL for off-chain project specification |
+
+### Packages
+
+| Package | Description |
+|---------|-------------|
+| [Shared](./packages/shared/) | Shared library providing contract interfaces, admin transfer logic, checkpoint storage, and test utilities |
+| [Client](./packages/client/) | Type-safe async Rust clients (`std`, off-chain) for invoking the deployed WarpDrive contracts via [`soroban-rs`](https://crates.io/crates/soroban-rs); not a contract — does not compile to WASM |
+
+
 ## Architecture
 
 A WarpDrive project deploys one of two parallel stacks, identified by `verification_type` on the [Project Root](./contracts/project-root/):
@@ -30,36 +52,61 @@ The two stacks are structurally identical; only the cryptographic scheme and env
 flowchart TD
     Admin([Project Admin])
     Vectrs([Off-chain Vectrs / Aggregator])
+    Repo([Project Spec Repo<br/>JSON and WASM])
 
     Admin -->|governs| Root[Project Root<br/>verification_type]
 
     Root -.->|Ethereum variant| EthStack
     Root -.->|Stellar variant| XlmStack
+    Root -.->|Off-Chain| Repo
 
     subgraph EthStack["secp256k1 / Ethereum stack"]
         EthHandler[Ethereum Handler<br/>ABI envelope]
+        EthHandler2[Second Custom Handler]
         SecpVerify[secp256k1 Verification<br/>EIP-191]
         SecpSec[secp256k1 Security<br/>BytesN&lt;33&gt; signers]
         EthHandler -->|verify_eth| SecpVerify
+        EthHandler2 -->|verify_eth| SecpVerify
         SecpVerify -->|signer weights| SecpSec
     end
 
     subgraph XlmStack["ed25519 / Stellar stack"]
         XlmHandler[Stellar Handler<br/>XDR envelope]
+        XlmHandler2[Second Custom Handler]
         EdVerify[ed25519 Verification<br/>SEP-0053]
         EdSec[ed25519 Security<br/>BytesN&lt;32&gt; signers]
         XlmHandler -->|verify_xlm| EdVerify
+        XlmHandler2 -->|verify_xlm| EdVerify
         EdVerify -->|signer weights| EdSec
     end
 
     Vectrs -->|submit envelope| EthHandler
+    Vectrs -->|submit envelope| EthHandler2
     Vectrs -->|submit envelope| XlmHandler
+    Vectrs -->|submit envelope| XlmHandler2
     Vectrs -.->|read spec / addresses| Root
 ```
 
 All cross-contract calls go through the trait clients defined in [`packages/shared/src/interfaces/`](./packages/shared/src/interfaces/), so the on-chain contracts never depend on each other's crates. Off-chain Rust callers use the typed async clients in [`packages/client/`](./packages/client/).
 
-## Quick Start
+## Docker Deployment
+
+We provide [docker images](./docker/middleware/README.md) that allows you to deploy and interact with these core contracts without installing anything on your system. For CI, testing and production deployments, this is the easiest and most repeatable route. Read the [docker docs](./docker/middleware/README.md) for more information, or just deploy to testnet like this:
+
+```bash
+# start a long-lived process to serve all interactions
+docker run -d --rm --name wdm \
+  --pull=always \
+  -e RPC_URL=https://soroban-testnet.stellar.org \
+  -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
+  -v $PWD/out:/out \
+  ghcr.io/warp-driver/warpdrive-stellar-middleware:0.2
+
+# easy run commands to deploy and update the contracts
+docker exec wdm /warpdrive/cli.sh deploy --output-path /out/deploy.json
+```
+
+## Dev Quick Start
 
 Install [Rust](https://rustup.rs/) (1.94.0+) and [Task](https://taskfile.dev/), then install the `wasm32v1-none` target and the [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) (required for `task optimize` and `task deploy`):
 
@@ -151,27 +198,6 @@ Verify the published spec:
 CID=$(cat .testnet/spec.cid)
 curl -s "https://gateway.pinata.cloud/ipfs/$CID" | jq .
 ```
-
-## Contracts and Packages
-
-### Contracts
-
-| Contract | Description |
-|----------|-------------|
-| [Ethereum Handler](./contracts/ethereum-handler/) | Entry point for envelopes originating from Ethereum-compatible chains; ABI-decodes payloads, enforces replay protection, and delegates to the secp256k1 verification contract |
-| [Stellar Handler](./contracts/stellar-handler/) | Entry point for envelopes originating from Stellar; decodes payloads, enforces replay protection, and delegates to the ed25519 verification contract |
-| [secp256k1 Security](./contracts/secp256k1-security/) | Proof-of-Authority registry of secp256k1 signers with weighted keys and configurable verification thresholds |
-| [ed25519 Security](./contracts/ed25519-security/) | Proof-of-Authority registry of ed25519 signers with weighted keys and configurable verification thresholds |
-| [secp256k1 Verification](./contracts/secp256k1-verification/) | EIP-191 secp256k1 signature verification against the secp256k1 Security contract's signer set |
-| [ed25519 Verification](./contracts/ed25519-verification/) | ed25519 signature verification against the ed25519 Security contract's signer set |
-| [Project Root](./contracts/project-root/) | Minimal root governance contract for a WarpDrive project - references contract and URL for off-chain project specification |
-
-### Packages
-
-| Package | Description |
-|---------|-------------|
-| [Shared](./packages/shared/) | Shared library providing contract interfaces, admin transfer logic, checkpoint storage, and test utilities |
-| [Client](./packages/client/) | Type-safe async Rust clients (`std`, off-chain) for invoking the deployed WarpDrive contracts via [`soroban-rs`](https://crates.io/crates/soroban-rs); not a contract — does not compile to WASM |
 
 ## License
 
