@@ -116,16 +116,20 @@ curl -s "https://gateway.pinata.cloud/ipfs/$CID" | jq .
 
 | Contract | Description |
 |----------|-------------|
-| [Handler](./contracts/handler/) | Entry point for cross-chain envelopes; ABI-decodes payloads, enforces replay protection, and delegates signature verification |
-| [Security](./contracts/security/) | Proof-of-Authority signer registry with weighted keys and configurable verification thresholds |
-| [Verification](./contracts/verification/) | EIP-191 secp256k1 signature verification against the Security contract's signer set |
-| [Project Root](./contracts/project-root/) | Minimal root governance contract for a WarpDrive project |
+| [Ethereum Handler](./contracts/ethereum-handler/) | Entry point for envelopes originating from Ethereum-compatible chains; ABI-decodes payloads, enforces replay protection, and delegates to the secp256k1 verification contract |
+| [Stellar Handler](./contracts/stellar-handler/) | Entry point for envelopes originating from Stellar; decodes payloads, enforces replay protection, and delegates to the ed25519 verification contract |
+| [secp256k1 Security](./contracts/secp256k1-security/) | Proof-of-Authority registry of secp256k1 signers with weighted keys and configurable verification thresholds |
+| [ed25519 Security](./contracts/ed25519-security/) | Proof-of-Authority registry of ed25519 signers with weighted keys and configurable verification thresholds |
+| [secp256k1 Verification](./contracts/secp256k1-verification/) | EIP-191 secp256k1 signature verification against the secp256k1 Security contract's signer set |
+| [ed25519 Verification](./contracts/ed25519-verification/) | ed25519 signature verification against the ed25519 Security contract's signer set |
+| [Project Root](./contracts/project-root/) | Minimal root governance contract for a WarpDrive project - references contract and URL for off-chain project specification |
 
 ### Packages
 
 | Package | Description |
 |---------|-------------|
 | [Shared](./packages/shared/) | Shared library providing contract interfaces, admin transfer logic, checkpoint storage, and test utilities |
+| [Client](./packages/client/) | Type-safe async Rust clients (`std`, off-chain) for invoking the deployed WarpDrive contracts via [`soroban-rs`](https://crates.io/crates/soroban-rs); not a contract — does not compile to WASM |
 
 ## License
 
