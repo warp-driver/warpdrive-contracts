@@ -61,6 +61,7 @@ COPY --from=builder /src/target/wasm32v1-none/release/warpdrive_project_root.was
 COPY docker/middleware/cli.sh /warpdrive/cli.sh
 COPY docker/middleware/deploy.sh /warpdrive/deploy.sh
 COPY docker/middleware/signers.sh /warpdrive/signers.sh
+COPY docker/middleware/project_root.sh /warpdrive/project_root.sh
 COPY docker/middleware/common.sh /warpdrive/common.sh
 RUN chmod +x /warpdrive/*.sh
 
