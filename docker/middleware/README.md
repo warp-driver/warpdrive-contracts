@@ -4,7 +4,7 @@ Docker image that packages the Warpdrive Soroban contracts behind a small CLI,
 so Warpdrive's e2e harness can deploy and manage them the same way it does
 `wavs-middleware` (Eigenlayer), `poa-middleware`, and `cw-middleware` (Cosmos).
 
-## Build
+## Build (Optional)
 
 Build context must be the repository root:
 
@@ -14,6 +14,21 @@ docker build -t warpdrive-stellar-middleware:dev -f docker/middleware/Dockerfile
 
 The builder stage installs `stellar-cli`, compiles the seven contracts to
 `wasm32v1-none`, and bakes them into the runtime image under `/warpdrive/wasm/`.
+
+## Pull
+
+All images can be found at GitHub Container Repo as `ghcr.io/warp-driver/warpdrive-stellar-middleware`.
+The [CI builds](../../.github/workflows/middleware-image.yml) images on git tags, pushes to main, and PRs that modify this directory. 
+You can reference the following tags:
+
+* `latest` - last commit on `main` branch
+* `0.2.0` - exact match in `v0.2.0` tag
+* `0.2` - most recent patch release, could be `0.2.0`, `0.2.1`, `0.2.2`, etc
+* `pr-36` - if a PR touches the docker build system, it will get tagged on the PR number 
+* `13bbffc` - you can use a short git hash to refer to a commit that triggered CI. It will also be tagged with one or more of the above.
+
+Generally, pull `ghcr.io/warp-driver/warpdrive-stellar-middleware:latest` for development and testing and
+`ghcr.io/warp-driver/warpdrive-stellar-middleware:0.2.1` or similar for reproducable builds on a tagged version. 
 
 ## Run
 
@@ -27,7 +42,7 @@ docker run -d --name wdm \
   -e RPC_URL=https://soroban-testnet.stellar.org \
   -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
   -v $PWD/out:/out \
-  warpdrive-stellar-middleware:dev
+  ghcr.io/warp-driver/warpdrive-stellar-middleware:latest
 ```
 
 **Mainnet / BYOK** — friendbot doesn't exist, so you must bring a funded key.
@@ -41,7 +56,7 @@ docker run -d --name wdm \
   -e DEPLOYER_SECRET="S..." \
   -e DEPLOYER_ADDRESS="G..." \
   -v $PWD/out:/out \
-  warpdrive-stellar-middleware:dev
+  ghcr.io/warp-driver/warpdrive-stellar-middleware:latest
 ```
 
 ## CLI
@@ -164,7 +179,7 @@ Each call should print a transaction hash with no error.
 PROJECT_ROOT=$(jq -r .contracts.project_root out/deploy.json)
 docker run --rm \
   -v $PWD/out/.keys:/root/.config/soroban \
-  warpdrive-stellar-middleware:dev \
+  ghcr.io/warp-driver/warpdrive-stellar-middleware:latest \
   stellar contract invoke \
     --id "$PROJECT_ROOT" \
     --source warpdrive-deployer \
