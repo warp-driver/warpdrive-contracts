@@ -8,19 +8,29 @@ Signer weights are stored using a checkpoint system, which enables point-in-time
 
 Use the Ed25519 Security contract when your WarpDrive process operates natively on Soroban without needing cross-chain EVM compatibility. Vectrs in this configuration sign attestations with ed25519 keys following SEP-0053 message formatting, and the corresponding Ed25519 Verification contract uses Soroban's native `ed25519_verify` precompile for signature validation. This is the right choice for Stellar-to-Stellar workflows, Soroban contract orchestration, and any process where operators already hold Stellar keypairs.
 
-For cross-chain processes that bridge with Ethereum or other EVM chains, see the [Secp256k1 Security contract](../secp256k1-security/README.md).
+For cross-chain processes that bridge with Ethereum or other EVM chains, see the [Secp256k1 Security contract](../secp256k1-security/).
+
+## Source Layout
+
+| File | Purpose |
+|------|---------|
+| [`src/contract.rs`](./src/contract.rs) | Implements `Ed25519SecurityInterface` and `WarpDriveInterface` |
+| [`src/storage.rs`](./src/storage.rs) | Persistent signer set, threshold storage, and `CheckpointStore` impl over signer weights |
+| [`src/lib.rs`](./src/lib.rs) | Crate root and module wiring |
+
+The historical-weight machinery (binary search, same-ledger coalescing, pruning) is provided by the [`checkpoint`](../../packages/shared/src/checkpoint.rs) module in `warpdrive-shared`; this contract only supplies the storage backend.
 
 ## Contract Interactions
 
-**Ed25519 Verification contract** -- The Verification contract calls into this contract to look up signer weights (both current and historical) and to compute the required weight threshold. These cross-contract calls happen during every signature verification flow.
+**[Ed25519 Verification contract](../ed25519-verification/)** -- The Verification contract calls into this contract via the [`Ed25519SecurityClient`](../../packages/shared/src/interfaces/security.rs) trait to look up signer weights (both current and historical) and to compute the required weight threshold. These cross-contract calls happen during every signature verification flow.
 
-**Off-chain components** -- Project governance (a multisig, DAO, or single admin) manages the signer set through this contract. When new Vectr operators are onboarded, their ed25519 public keys are registered here. The `list_signers` query allows off-chain tooling to display the current operator set. Vectrs themselves do not interact with this contract directly -- they only need their own signing keys.
+**Off-chain components** -- Project governance (a multisig, DAO, or single admin) manages the signer set through this contract. When new Vectr operators are onboarded, their ed25519 public keys are registered here. The `list_signers` query allows off-chain tooling to display the current operator set. Vectrs themselves do not interact with this contract directly -- they only need their own signing keys. The [`warpdrive-client`](../../packages/client/) package provides a typed async client (`Ed25519Security`) for governance tooling.
 
-**Handler contract** -- The Handler does not call this contract directly. All Security queries flow through the Verification contract.
+**Handler contract** -- The [Stellar Handler](../stellar-handler/) does not call this contract directly. All Security queries flow through the Verification contract.
 
 ## Interface
 
-The full interface is defined in [`Ed25519SecurityInterface`](https://github.com/warp-driver/warpdrive-contracts/blob/main/packages/shared/src/interfaces/security.rs).
+The full interface is defined in [`Ed25519SecurityInterface`](../../packages/shared/src/interfaces/security.rs). Standard admin / upgrade / version methods come from [`WarpDriveInterface`](../../packages/shared/src/interfaces/warpdrive.rs).
 
 ### State-Changing Actions
 
@@ -53,6 +63,8 @@ The full interface is defined in [`Ed25519SecurityInterface`](https://github.com
 | `version() -> String` | Return the current contract version. |
 
 ### Types
+
+Defined in [`packages/shared/src/interfaces/security.rs`](../../packages/shared/src/interfaces/security.rs) (with `Ed25519PubKey` aliased in [`mod.rs`](../../packages/shared/src/interfaces/mod.rs)):
 
 - **`Ed25519PubKey`** -- `BytesN<32>` -- ed25519 public key (32 bytes).
 - **`Ed25519SignerInfo`** -- `{ key: Ed25519PubKey, weight: u64 }` -- a signer and their weight.

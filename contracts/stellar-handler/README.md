@@ -6,7 +6,17 @@ In this demo, the Handler simply stores the verified payload for later retrieval
 
 The Handler is designed to be the **admin or hold a privileged role** on those downstream contracts. Since only envelopes that pass full signature verification can trigger the Handler's actions, this effectively gates all downstream operations behind the consensus of the off-chain Vectrs running the project's defined WASI logic. This is the core pattern of WarpDrive: off-chain compute secured by on-chain verification, where the Handler is the bridge between the two.
 
-When an aggregator submits an envelope, the Handler XDR-decodes it (Soroban native format) to extract the event ID and payload, enforces replay protection by tracking which event IDs have already been processed, and delegates ed25519 signature validation (SEP-0053 format) to the Ed25519 Verification contract.
+When an aggregator submits an envelope, the Handler XDR-decodes it (Soroban native format) to extract the event ID and payload, enforces replay protection by tracking which event IDs have already been processed, and delegates ed25519 signature validation (SEP-0053 format) to the [Ed25519 Verification contract](../ed25519-verification/).
+
+## Source Layout
+
+| File | Purpose |
+|------|---------|
+| [`src/contract.rs`](./src/contract.rs) | Implements `StellarHandlerInterface` and `WarpDriveInterface` |
+| [`src/storage.rs`](./src/storage.rs) | Persistent event-ID set and per-event payload storage |
+| [`src/lib.rs`](./src/lib.rs) | Crate root and module wiring |
+
+The `XlmEnvelope` struct itself lives in [`packages/shared/src/interfaces/handler.rs`](../../packages/shared/src/interfaces/handler.rs) since it is a Soroban-native `#[contracttype]` and is part of the handler interface.
 
 ## When to use this contract
 
@@ -16,15 +26,17 @@ For multi-chain processes where the same signed payload needs to be verifiable o
 
 ## Contract Interactions
 
-**Ed25519 Verification contract** -- The Handler calls the Verification contract via a lightweight client trait to validate that the submitted ed25519 signatures carry sufficient weight. The Verification contract uses Soroban's native `ed25519_verify` and `sha256` precompiles for verification, and queries the Ed25519 Security contract for signer weights and thresholds. All verification errors propagate directly back to the Handler's caller.
+**[Ed25519 Verification contract](../ed25519-verification/)** -- The Handler calls the Verification contract via the [`Ed25519VerificationClient`](../../packages/shared/src/interfaces/verification.rs) trait to validate that the submitted ed25519 signatures carry sufficient weight. The Verification contract uses Soroban's native `ed25519_verify` and `sha256` precompiles for verification, and queries the [Ed25519 Security contract](../ed25519-security/) for signer weights and thresholds. All verification errors propagate directly back to the Handler's caller.
 
 **Off-chain components** -- Aggregators submit envelopes to the Handler after collecting sufficient Vectr attestations. The `reference_block` field in the signature data allows point-in-time weight lookups, ensuring that the signer set used for verification matches the set that was active when the Vectrs produced their attestations.
 
 **Downstream contracts** -- In this reference implementation, verified payloads are simply stored and can be read via the `payload` query. In a production handler, this is where you would parse the payload and call application-specific contracts.
 
+**Off-chain Rust callers** -- The [`warpdrive-client`](../../packages/client/) package provides a typed async client (`StellarHandler`) for submitting envelopes from any Rust application without depending on the on-chain crate.
+
 ## Interface
 
-The full interface is defined in [`StellarHandlerInterface`](https://github.com/warp-driver/warpdrive-contracts/blob/main/packages/shared/src/interfaces/handler.rs).
+The full interface is defined in [`StellarHandlerInterface`](../../packages/shared/src/interfaces/handler.rs). Standard admin / upgrade / version methods come from [`WarpDriveInterface`](../../packages/shared/src/interfaces/warpdrive.rs).
 
 ### State-Changing Actions
 
@@ -46,6 +58,8 @@ The full interface is defined in [`StellarHandlerInterface`](https://github.com/
 | `version() -> String` | Return the current contract version. |
 
 ### Types
+
+All defined in [`packages/shared/src/interfaces/handler.rs`](../../packages/shared/src/interfaces/handler.rs):
 
 - **`Ed25519SignatureData`** -- `{ signers: Vec<Ed25519PubKey>, signatures: Vec<BytesN<64>>, reference_block: u32 }` -- bundled ed25519 signature payload submitted by the aggregator.
 - **`XlmEnvelope`** -- `{ event_id: BytesN<20>, ordering: BytesN<12>, payload: Bytes }` -- native Stellar envelope format.

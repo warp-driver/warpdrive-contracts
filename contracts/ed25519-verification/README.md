@@ -8,15 +8,24 @@ The contract is stateless beyond its configuration (admin address and linked Sec
 
 Use the Ed25519 Verification contract when your WarpDrive process operates natively on Soroban without needing cross-chain EVM compatibility. Vectrs sign attestations with ed25519 keys following SEP-0053 message formatting, and this contract uses Soroban's native `ed25519_verify` precompile and `sha256` precompile for verification. This is the right choice for Stellar-to-Stellar workflows, Soroban contract orchestration, and any process where operators already hold Stellar keypairs.
 
-For cross-chain processes that bridge with Ethereum or other EVM chains, see the [Secp256k1 Verification contract](../secp256k1-verification/README.md).
+For cross-chain processes that bridge with Ethereum or other EVM chains, see the [Secp256k1 Verification contract](../secp256k1-verification/).
+
+## Source Layout
+
+| File | Purpose |
+|------|---------|
+| [`src/contract.rs`](./src/contract.rs) | Implements `Ed25519VerificationInterface` and `WarpDriveInterface` |
+| [`src/utils.rs`](./src/utils.rs) | SEP-0053 message construction, SHA-256 hashing, and `ed25519_verify` glue |
+| [`src/storage.rs`](./src/storage.rs) | Admin and linked Security contract address |
+| [`src/lib.rs`](./src/lib.rs) | Crate root and module wiring |
 
 ## Contract Interactions
 
-**Ed25519 Security contract** -- Calls the Security contract to look up signer weights and the required threshold. Uses historical weight queries (`get_signer_weights_at`, `required_weight_at`) when a `reference_block` is provided, ensuring verification uses the signer set that was active when the Vectrs signed.
+**[Ed25519 Security contract](../ed25519-security/)** -- Calls the Security contract via the [`Ed25519SecurityClient`](../../packages/shared/src/interfaces/security.rs) trait to look up signer weights and the required threshold. Uses historical weight queries (`get_signer_weights_at`, `required_weight_at`) when a `reference_block` is provided, ensuring verification uses the signer set that was active when the Vectrs signed.
 
-**Handler contract** -- The Handler calls `verify` after decoding the envelope and extracting signatures. The Verification contract validates the signatures and returns success or a typed error. The Handler does not need to understand the cryptographic details.
+**[Stellar Handler contract](../stellar-handler/)** -- The Handler calls `verify` after decoding the envelope and extracting signatures. The Verification contract validates the signatures and returns success or a typed error. The Handler does not need to understand the cryptographic details.
 
-**Off-chain components** -- Aggregators do not interact with this contract directly. They submit envelopes to the Handler, which delegates to Verification. However, off-chain tooling can call `check_one` to pre-validate a single signature before aggregation, or query `required_weight` and `signer_weight` for monitoring.
+**Off-chain components** -- Aggregators do not interact with this contract directly. They submit envelopes to the Handler, which delegates to Verification. However, off-chain tooling can call `check_one` to pre-validate a single signature before aggregation, or query `required_weight` and `signer_weight` for monitoring. The [`warpdrive-client`](../../packages/client/) package provides a typed async client (`Ed25519Verification`) for these calls.
 
 ## Signature Verification Flow
 
@@ -38,7 +47,7 @@ In practice this distinction is transparent to end users: invalid signatures are
 
 ## Interface
 
-The full interface is defined in [`Ed25519VerificationInterface`](https://github.com/warp-driver/warpdrive-contracts/blob/main/packages/shared/src/interfaces/verification.rs).
+The full interface is defined in [`Ed25519VerificationInterface`](../../packages/shared/src/interfaces/verification.rs). Standard admin / upgrade / version methods come from [`WarpDriveInterface`](../../packages/shared/src/interfaces/warpdrive.rs).
 
 ### State-Changing Actions
 
@@ -62,6 +71,8 @@ The full interface is defined in [`Ed25519VerificationInterface`](https://github
 | `version() -> String` | Return the current contract version. |
 
 ### Types
+
+Defined in [`packages/shared/src/interfaces/mod.rs`](../../packages/shared/src/interfaces/mod.rs):
 
 - **`Ed25519PubKey`** -- `BytesN<32>` -- ed25519 public key (32 bytes).
 - **`Ed25519Signature`** -- `BytesN<64>` -- ed25519 signature (64 bytes).

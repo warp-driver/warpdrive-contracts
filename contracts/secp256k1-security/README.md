@@ -8,19 +8,29 @@ Signer weights are stored using a checkpoint system, which enables point-in-time
 
 Use the Secp256k1 Security contract when your WarpDrive process involves cross-chain communication with Ethereum or other EVM-compatible chains. Vectrs in this configuration sign attestations with secp256k1 keys using EIP-191 message formatting, and the corresponding Secp256k1 Verification contract recovers the signer from the signature using `secp256k1_recover`. This is the right choice for any bridge, cross-chain oracle, or multi-chain dApp where the same operator keys need to be valid on both Stellar and an EVM chain.
 
-For Soroban-native processes that don't need EVM compatibility, see the [Ed25519 Security contract](../ed25519-security/README.md).
+For Soroban-native processes that don't need EVM compatibility, see the [Ed25519 Security contract](../ed25519-security/).
+
+## Source Layout
+
+| File | Purpose |
+|------|---------|
+| [`src/contract.rs`](./src/contract.rs) | Implements `Secp256k1SecurityInterface` and `WarpDriveInterface` |
+| [`src/storage.rs`](./src/storage.rs) | Persistent signer set, threshold storage, and `CheckpointStore` impl over signer weights |
+| [`src/lib.rs`](./src/lib.rs) | Crate root and module wiring |
+
+The historical-weight machinery (binary search, same-ledger coalescing, pruning) is provided by the [`checkpoint`](../../packages/shared/src/checkpoint.rs) module in `warpdrive-shared`; this contract only supplies the storage backend.
 
 ## Contract Interactions
 
-**Secp256k1 Verification contract** -- The Verification contract calls into this contract to look up signer weights (both current and historical) and to compute the required weight threshold. These cross-contract calls happen during every signature verification flow.
+**[Secp256k1 Verification contract](../secp256k1-verification/)** -- The Verification contract calls into this contract via the [`Secp256k1SecurityClient`](../../packages/shared/src/interfaces/security.rs) trait to look up signer weights (both current and historical) and to compute the required weight threshold. These cross-contract calls happen during every signature verification flow.
 
-**Off-chain components** -- Project governance (a multisig, DAO, or single admin) manages the signer set through this contract. When new Vectr operators are onboarded, their compressed secp256k1 public keys are registered here. The `list_signers` query allows off-chain tooling to display the current operator set. Vectrs themselves do not interact with this contract directly -- they only need their own signing keys.
+**Off-chain components** -- Project governance (a multisig, DAO, or single admin) manages the signer set through this contract. When new Vectr operators are onboarded, their compressed secp256k1 public keys are registered here. The `list_signers` query allows off-chain tooling to display the current operator set. Vectrs themselves do not interact with this contract directly -- they only need their own signing keys. The [`warpdrive-client`](../../packages/client/) package provides a typed async client (`Secp256k1Security`) for governance tooling.
 
-**Handler contract** -- The Handler does not call this contract directly. All Security queries flow through the Verification contract.
+**Handler contract** -- The [Ethereum Handler](../ethereum-handler/) does not call this contract directly. All Security queries flow through the Verification contract.
 
 ## Interface
 
-The full interface is defined in [`Secp256k1SecurityInterface`](https://github.com/warp-driver/warpdrive-contracts/blob/main/packages/shared/src/interfaces/security.rs).
+The full interface is defined in [`Secp256k1SecurityInterface`](../../packages/shared/src/interfaces/security.rs). Standard admin / upgrade / version methods come from [`WarpDriveInterface`](../../packages/shared/src/interfaces/warpdrive.rs).
 
 ### State-Changing Actions
 
@@ -53,6 +63,8 @@ The full interface is defined in [`Secp256k1SecurityInterface`](https://github.c
 | `version() -> String` | Return the current contract version. |
 
 ### Types
+
+Defined in [`packages/shared/src/interfaces/security.rs`](../../packages/shared/src/interfaces/security.rs) (with `CompressedSecpPubKey` aliased in [`mod.rs`](../../packages/shared/src/interfaces/mod.rs)):
 
 - **`CompressedSecpPubKey`** -- `BytesN<33>` -- compressed secp256k1 public key (33 bytes).
 - **`SignerInfo`** -- `{ key: CompressedSecpPubKey, weight: u64 }` -- a signer and their weight.

@@ -13,9 +13,51 @@ Handler --> Verification --> Security
 ```
 
 - **Security** maintains a Proof-of-Authority registry of trusted Vectr public keys and their weights, and computes the threshold required for valid attestation.
-- **Verification** performs secp256k1 signature recovery (EIP-191) and checks that submitted signatures carry enough cumulative weight against the Security contract's threshold.
-- **Handler** is the entry point for cross-chain envelopes. It ABI-decodes the payload, enforces replay protection, and delegates cryptographic validation to the Verification contract.
-- **Project Root** is the root governance contract for a WarpDrive project, controlled by the project's admin.
+- **Verification** validates signatures against the Security contract's signer set and threshold.
+- **Handler** is the entry point for envelopes from a remote chain. It decodes the payload, enforces replay protection, and delegates cryptographic validation to the Verification contract.
+- **Project Root** is the root governance contract for a WarpDrive project, controlled by the project's admin. It points to either the secp256k1 / Ethereum stack or the ed25519 / Stellar stack.
+
+## Architecture
+
+A WarpDrive project deploys one of two parallel stacks, identified by `verification_type` on the [Project Root](./contracts/project-root/):
+
+- **`Ethereum`** — secp256k1 keys, EIP-191 signatures, ABI-encoded envelopes. Use when the same signed payloads need to be verifiable on both EVM chains and Stellar.
+- **`Stellar`** — ed25519 keys, SEP-0053 signatures, XDR-encoded envelopes. Use for Soroban-native projects with no EVM compatibility requirement.
+
+The two stacks are structurally identical; only the cryptographic scheme and envelope encoding differ. The same governance admin controls the Project Root, the Security registry, and the Verification + Handler contracts in either variant.
+
+```mermaid
+flowchart TD
+    Admin([Project Admin])
+    Vectrs([Off-chain Vectrs / Aggregator])
+
+    Admin -->|governs| Root[Project Root<br/>verification_type]
+
+    Root -.->|Ethereum variant| EthStack
+    Root -.->|Stellar variant| XlmStack
+
+    subgraph EthStack["secp256k1 / Ethereum stack"]
+        EthHandler[Ethereum Handler<br/>ABI envelope]
+        SecpVerify[secp256k1 Verification<br/>EIP-191]
+        SecpSec[secp256k1 Security<br/>BytesN&lt;33&gt; signers]
+        EthHandler -->|verify_eth| SecpVerify
+        SecpVerify -->|signer weights| SecpSec
+    end
+
+    subgraph XlmStack["ed25519 / Stellar stack"]
+        XlmHandler[Stellar Handler<br/>XDR envelope]
+        EdVerify[ed25519 Verification<br/>SEP-0053]
+        EdSec[ed25519 Security<br/>BytesN&lt;32&gt; signers]
+        XlmHandler -->|verify_xlm| EdVerify
+        EdVerify -->|signer weights| EdSec
+    end
+
+    Vectrs -->|submit envelope| EthHandler
+    Vectrs -->|submit envelope| XlmHandler
+    Vectrs -.->|read spec / addresses| Root
+```
+
+All cross-contract calls go through the trait clients defined in [`packages/shared/src/interfaces/`](./packages/shared/src/interfaces/), so the on-chain contracts never depend on each other's crates. Off-chain Rust callers use the typed async clients in [`packages/client/`](./packages/client/).
 
 ## Quick Start
 
