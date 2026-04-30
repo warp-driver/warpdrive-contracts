@@ -1,0 +1,7 @@
+target/
+.soroban/
+.claude/
+.env
+test_snapshots/
+.testnet/
+out/
