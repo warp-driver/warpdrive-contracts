@@ -28,6 +28,14 @@ subcommands:
                  --numerator <u32> --denominator <u32>
                  --deploy-file <path>
 
+  get-project-spec-repo  --deploy-file <path>
+                 Read the project_spec_repo URL from the project-root contract.
+                 Env: RPC_URL, NETWORK_PASSPHRASE, DEPLOYER_SECRET
+
+  set-project-spec-repo  --repo <url> --deploy-file <path>
+                 Update the project_spec_repo URL on the project-root contract.
+                 Admin-only. Env: RPC_URL, NETWORK_PASSPHRASE, DEPLOYER_SECRET
+
   get-ledger     Print the current ledger sequence from the configured RPC.
                  Env: RPC_URL
 
@@ -49,6 +57,9 @@ case "$cmd" in
         ;;
     add-signer|remove-signer|set-threshold)
         exec /warpdrive/signers.sh "$cmd" "$@"
+        ;;
+    get-project-spec-repo|set-project-spec-repo)
+        exec /warpdrive/project_root.sh "$cmd" "$@"
         ;;
     get-ledger)
         get_latest_ledger

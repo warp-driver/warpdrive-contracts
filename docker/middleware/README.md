@@ -38,7 +38,8 @@ Start a long-lived container and issue commands via `docker exec`.
 throwaway identity on first use:
 
 ```bash
-docker run -d --name wdm \
+docker run -d --rm --name wdm \
+  --pull=always \
   -e RPC_URL=https://soroban-testnet.stellar.org \
   -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
   -v $PWD/out:/out \
@@ -50,7 +51,8 @@ Provide the secret and its G... address; the secret is used as `--source`
 directly (no identity import):
 
 ```bash
-docker run -d --name wdm \
+docker run -d --rm --name wdm \
+  --pull=always \
   -e RPC_URL=https://soroban.stellar.org:443 \
   -e NETWORK_PASSPHRASE="Public Global Stellar Network ; September 2015" \
   -e DEPLOYER_SECRET="S..." \
@@ -67,6 +69,8 @@ docker run -d --name wdm \
 | `add-signer` | `--scheme {secp256k1,ed25519} --key <hex> --weight <u32> --deploy-file <path>` | Registers (or updates) a signer on the matching security contract. |
 | `remove-signer` | `--scheme ... --key <hex> --deploy-file <path>` | Removes a signer. |
 | `set-threshold` | `--scheme ... --numerator <u32> --denominator <u32> --deploy-file <path>` | Sets the consensus fraction. |
+| `get-project-spec-repo` | `--deploy-file <path>` | Reads the project specification URL from the project-root contract. |
+| `set-project-spec-repo` | `--repo <url> --deploy-file <path>` | Updates the project specification URL on the project-root contract (admin-only). |
 | `get-ledger` | — | Prints the current ledger sequence (for `reference_block` lookups). |
 | `help` | — | Prints usage. |
 
@@ -81,6 +85,13 @@ docker exec wdm /warpdrive/cli.sh add-signer \
 
 docker exec wdm /warpdrive/cli.sh set-threshold \
   --scheme secp256k1 --numerator 2 --denominator 3 \
+  --deploy-file /out/deploy.json
+
+docker exec wdm /warpdrive/cli.sh get-project-spec-repo \
+  --deploy-file /out/deploy.json
+
+docker exec wdm /warpdrive/cli.sh set-project-spec-repo \
+  --repo "ipfs://bafy.../spec.json" \
   --deploy-file /out/deploy.json
 ```
 
@@ -178,6 +189,7 @@ Each call should print a transaction hash with no error.
 ```bash
 PROJECT_ROOT=$(jq -r .contracts.project_root out/deploy.json)
 docker run --rm \
+  --pull=always \
   -v $PWD/out/.keys:/root/.config/soroban \
   ghcr.io/warp-driver/warpdrive-stellar-middleware:latest \
   stellar contract invoke \

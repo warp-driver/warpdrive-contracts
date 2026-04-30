@@ -6,7 +6,16 @@ In this demo, the Handler simply stores the verified payload for later retrieval
 
 The Handler is designed to be the **admin or hold a privileged role** on those downstream contracts. Since only envelopes that pass full signature verification can trigger the Handler's actions, this effectively gates all downstream operations behind the consensus of the off-chain Vectrs running the project's defined WASI logic. This is the core pattern of WarpDrive: off-chain compute secured by on-chain verification, where the Handler is the bridge between the two.
 
-When an aggregator submits an envelope, the Handler ABI-decodes it (Solidity-compatible format) to extract the event ID and payload, enforces replay protection by tracking which event IDs have already been processed, and delegates secp256k1 signature validation (EIP-191 format) to the Secp256k1 Verification contract.
+When an aggregator submits an envelope, the Handler ABI-decodes it (Solidity-compatible format) to extract the event ID and payload, enforces replay protection by tracking which event IDs have already been processed, and delegates secp256k1 signature validation (EIP-191 format) to the [Secp256k1 Verification contract](../secp256k1-verification/).
+
+## Source Layout
+
+| File | Purpose |
+|------|---------|
+| [`src/contract.rs`](./src/contract.rs) | Implements `EthereumHandlerInterface` and `WarpDriveInterface` |
+| [`src/envelope.rs`](./src/envelope.rs) | Solidity ABI envelope (`bytes20 eventId, bytes12 ordering, bytes payload`) decoded via `alloy-sol-types` |
+| [`src/storage.rs`](./src/storage.rs) | Persistent event-ID set and per-event payload storage |
+| [`src/lib.rs`](./src/lib.rs) | Crate root and module wiring |
 
 ## When to use this contract
 
@@ -16,15 +25,17 @@ For Soroban-only solutions that don't need EVM compatibility, see the [Stellar H
 
 ## Contract Interactions
 
-**Secp256k1 Verification contract** -- The Handler calls the Verification contract via a lightweight client trait to validate that the submitted secp256k1 signatures carry sufficient weight. The Verification contract in turn queries the Secp256k1 Security contract for signer weights and thresholds. All verification errors propagate directly back to the Handler's caller.
+**[Secp256k1 Verification contract](../secp256k1-verification/)** -- The Handler calls the Verification contract via the [`Secp256k1VerificationClient`](../../packages/shared/src/interfaces/verification.rs) trait to validate that the submitted secp256k1 signatures carry sufficient weight. The Verification contract in turn queries the [Secp256k1 Security contract](../secp256k1-security/) for signer weights and thresholds. All verification errors propagate directly back to the Handler's caller.
 
 **Off-chain components** -- Aggregators submit envelopes to the Handler after collecting sufficient Vectr attestations. The `reference_block` field in the signature data allows point-in-time weight lookups, ensuring that the signer set used for verification matches the set that was active when the Vectrs produced their attestations.
 
 **Downstream contracts** -- In this reference implementation, verified payloads are simply stored and can be read via the `payload` query. In a production handler, this is where you would parse the payload and call application-specific contracts.
 
+**Off-chain Rust callers** -- The [`warpdrive-client`](../../packages/client/) package provides a typed async client (`EthereumHandler`) for submitting envelopes from any Rust application without depending on the on-chain crate.
+
 ## Interface
 
-The full interface is defined in [`EthereumHandlerInterface`](https://github.com/warp-driver/warpdrive-contracts/blob/main/packages/shared/src/interfaces/handler.rs).
+The full interface is defined in [`EthereumHandlerInterface`](../../packages/shared/src/interfaces/handler.rs). Standard admin / upgrade / version methods come from [`WarpDriveInterface`](../../packages/shared/src/interfaces/warpdrive.rs).
 
 ### State-Changing Actions
 
@@ -47,7 +58,8 @@ The full interface is defined in [`EthereumHandlerInterface`](https://github.com
 
 ### Types
 
-- **`SignatureData`** -- `{ signers: Vec<CompressedSecpPubKey>, signatures: Vec<BytesN<65>>, reference_block: u32 }` -- bundled secp256k1 signature payload submitted by the aggregator.
+- **`SignatureData`** -- `{ signers: Vec<CompressedSecpPubKey>, signatures: Vec<BytesN<65>>, reference_block: u32 }` -- bundled secp256k1 signature payload submitted by the aggregator. Defined in [`packages/shared/src/interfaces/handler.rs`](../../packages/shared/src/interfaces/handler.rs).
+- **`Envelope`** -- Solidity ABI struct decoded from the raw envelope bytes; see [`src/envelope.rs`](./src/envelope.rs).
 
 ### Errors
 
