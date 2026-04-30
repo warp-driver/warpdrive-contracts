@@ -38,7 +38,8 @@ Start a long-lived container and issue commands via `docker exec`.
 throwaway identity on first use:
 
 ```bash
-docker run -d --name wdm \
+docker run -d --rm --name wdm \
+  --pull=always \
   -e RPC_URL=https://soroban-testnet.stellar.org \
   -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
   -v $PWD/out:/out \
@@ -50,7 +51,8 @@ Provide the secret and its G... address; the secret is used as `--source`
 directly (no identity import):
 
 ```bash
-docker run -d --name wdm \
+docker run -d --rm --name wdm \
+  --pull=always \
   -e RPC_URL=https://soroban.stellar.org:443 \
   -e NETWORK_PASSPHRASE="Public Global Stellar Network ; September 2015" \
   -e DEPLOYER_SECRET="S..." \
@@ -187,6 +189,7 @@ Each call should print a transaction hash with no error.
 ```bash
 PROJECT_ROOT=$(jq -r .contracts.project_root out/deploy.json)
 docker run --rm \
+  --pull=always \
   -v $PWD/out/.keys:/root/.config/soroban \
   ghcr.io/warp-driver/warpdrive-stellar-middleware:latest \
   stellar contract invoke \
