@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-# Builder stage: compiles the Soroban contracts to WASM and installs stellar-cli.
 # Build context is the repository root; invoke as:
 #   docker build -t warpdrive-stellar-middleware:dev -f docker/middleware/Dockerfile .
-FROM rust:1.94-bookworm AS builder
+FROM rust:1.94-bookworm AS base
 
 ARG STELLAR_CLI_VERSION=26.0.0
 # Set automatically by BuildKit; resolved per build platform (amd64 / arm64).
@@ -32,7 +31,24 @@ RUN case "$TARGETARCH" in \
     && rm /tmp/stellar-cli.tar.gz \
     && stellar --version
 
+RUN cargo install cargo-chef --locked
+
+# Planner: extracts the dep graph into recipe.json
+FROM base AS planner
 WORKDIR /src
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Cacher: pre-builds the dep tree to wasm32v1-none
+FROM base AS cacher
+WORKDIR /src
+COPY --from=planner /src/recipe.json recipe.json
+RUN cargo chef cook --release --target wasm32v1-none --recipe-path recipe.json
+
+# Builder: copy the warm target/ first, then full source on top.
+FROM base AS builder
+WORKDIR /src
+COPY --from=cacher /src/target target
 COPY . .
 RUN task optimize
 
