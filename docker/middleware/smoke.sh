@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Host-side wrapper for smoke-testing the middleware image.
 #
-# Defaults to a local Stellar Quickstart sidecar (`stellar/quickstart:latest`
-# on docker network `wdnet`), which it auto-starts on first use. Pass
-# `--network testnet` as the first arg to hit testnet instead.
+# Defaults to testnet (https://soroban-testnet.stellar.org). Pass
+# `--network local` as the first arg to spin up a local Stellar Quickstart
+# sidecar (`stellar/quickstart:latest` on docker network `wdnet`) — useful
+# for offline iteration but slower to bootstrap.
 #
 # Persists the generated identity + output JSON across invocations via host
 # bind mounts, so subsequent calls reuse the same admin.
@@ -13,7 +14,7 @@
 #   ./smoke.sh get-ledger
 #   ./smoke.sh add-signer --scheme secp256k1 --key 0x... --weight 100 \
 #                          --deploy-file /out/deploy.json
-#   ./smoke.sh --network testnet deploy --output-path /out/deploy.json
+#   ./smoke.sh --network local deploy --output-path /out/deploy.json
 #   ./smoke.sh down       # tear down the local Quickstart sidecar + network
 #
 # Env overrides (all optional):
@@ -31,7 +32,7 @@
 
 set -euo pipefail
 
-NETWORK="local"
+NETWORK="testnet"
 if [ "${1:-}" = "--network" ]; then
     NETWORK="${2:-}"
     shift 2

@@ -32,16 +32,30 @@ Generally, pull `ghcr.io/warp-driver/warpdrive-stellar-middleware:latest` for de
 
 ## Run
 
-Start a long-lived container and issue commands via `docker exec`. The
-recommended local workflow is against [Stellar Quickstart](https://developers.stellar.org/docs/tools/quickstart) —
-a single sidecar container that bundles Core, Soroban RPC, and friendbot.
-Testnet/mainnet are documented below for PR-gated and release-gated runs.
+Start a long-lived container and issue commands via `docker exec`. Testnet
+is the default (managed Stellar testnet with built-in friendbot). A local
+[Stellar Quickstart](https://developers.stellar.org/docs/tools/quickstart)
+sidecar is documented below for offline iteration.
 
-### Local Quickstart (default)
+### Testnet / futurenet (default)
+
+Container generates + friendbot-funds a throwaway identity on first use.
+No sidecar, no shared network:
+
+```bash
+docker run -d --rm --name wdm \
+  --pull=always \
+  -e RPC_URL=https://soroban-testnet.stellar.org \
+  -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
+  -v $PWD/out:/out \
+  ghcr.io/warp-driver/warpdrive-stellar-middleware:latest
+```
+
+### Local Quickstart (opt-in)
 
 Quickstart and the middleware run as siblings on a shared docker network so
-the middleware can resolve `stellar` by name. `smoke.sh` (see below) wraps
-this for you; the manual flow is:
+the middleware can resolve `stellar` by name. `smoke.sh --network local`
+(see below) wraps this for you; the manual flow is:
 
 ```bash
 docker network create wdnet
@@ -60,20 +74,6 @@ docker run -d --rm --name wdm --network wdnet \
 ```
 
 Tear down with `docker rm -f wdm stellar && docker network rm wdnet`.
-
-### Testnet / futurenet (managed)
-
-Container generates + friendbot-funds a throwaway identity on first use.
-No sidecar, no shared network:
-
-```bash
-docker run -d --rm --name wdm \
-  --pull=always \
-  -e RPC_URL=https://soroban-testnet.stellar.org \
-  -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
-  -v $PWD/out:/out \
-  ghcr.io/warp-driver/warpdrive-stellar-middleware:latest
-```
 
 ### Mainnet / BYOK
 
@@ -171,9 +171,9 @@ docker exec wdm /warpdrive/cli.sh set-project-spec-repo \
 the generated identity under `./out/.keys/` so the same admin is reused across
 `docker run --rm` invocations. Run it from the repository root.
 
-By default it runs against a local Stellar Quickstart sidecar (auto-started
-on docker network `wdnet`); pass `--network testnet` as the first arg to
-hit testnet instead. Use `./docker/middleware/smoke.sh down` to tear the
+By default it runs against testnet; pass `--network local` as the first
+arg to spin up a local Stellar Quickstart sidecar (auto-started on docker
+network `wdnet`). Use `./docker/middleware/smoke.sh down` to tear the
 local sidecar back down — host bind mounts (`./out/`, `./out/.keys/`) are
 preserved.
 
@@ -184,15 +184,14 @@ preserved.
 jq . out/deploy.json
 ```
 
-First run starts Quickstart, generates + friendbot-funds `warpdrive-deployer`
-locally, and deploys the 7 contracts. Subsequent calls reuse both the
-running Quickstart container and the identity. Expect 7 contract IDs plus
-`admin`, `rpc_url`, `network_passphrase`.
+First run on testnet generates + friendbot-funds `warpdrive-deployer` and
+deploys the 7 contracts. Subsequent calls reuse the same identity. Expect
+7 contract IDs plus `admin`, `rpc_url`, `network_passphrase`.
 
-For testnet:
+For local Quickstart:
 
 ```bash
-./docker/middleware/smoke.sh --network testnet deploy --output-path /out/deploy.json
+./docker/middleware/smoke.sh --network local deploy --output-path /out/deploy.json
 ```
 
 ### 2. Ledger probe
@@ -233,7 +232,7 @@ Each call should print a transaction hash with no error.
 ### 4. Cross-check admin against a deployed contract
 
 Read `rpc_url` and `network_passphrase` from the deploy manifest so the
-same command works for local Quickstart and testnet alike. In local mode
+same command works for testnet and local Quickstart alike. In local mode
 the middleware container needs to share `wdnet` to resolve `stellar:8000`:
 
 ```bash
