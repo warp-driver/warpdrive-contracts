@@ -101,6 +101,7 @@ persist_manifest() {
         --arg admin "$ADMIN_ADDRESS" \
         --arg rpc_url "$RPC_URL" \
         --arg network_passphrase "$NETWORK_PASSPHRASE" \
+        --arg variant "$VARIANT" \
         --arg secp_security "$SECP_SECURITY_ID" \
         --arg secp_verification "$SECP_VERIFICATION_ID" \
         --arg eth_handler "$ETH_HANDLER_ID" \
@@ -112,6 +113,7 @@ persist_manifest() {
             admin: $admin,
             rpc_url: $rpc_url,
             network_passphrase: $network_passphrase,
+            variant: $variant,
             contracts: ({
                 secp256k1_security: $secp_security,
                 secp256k1_verification: $secp_verification,
