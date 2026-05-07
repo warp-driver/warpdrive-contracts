@@ -2,7 +2,7 @@ name: warpdrive-stellar-middleware
 
 services:
   stellar:
-    image: stellar/quickstart:latest
+    image: stellar/quickstart:v637-b1021.1-latest
     container_name: stellar
     command: ["--local"]
     ports:

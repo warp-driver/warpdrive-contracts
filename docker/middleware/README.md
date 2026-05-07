@@ -83,7 +83,7 @@ For power users / debugging, the raw equivalent:
 docker network create wdnet
 
 docker run -d --rm --name stellar --network wdnet -p 8000:8000 \
-  stellar/quickstart:latest --local
+  stellar/quickstart:v637-b1021.1-latest --local
 # wait ~30-60s for the RPC to come up; poll http://localhost:8000/rpc
 
 docker run -d --rm --name wdm --network wdnet \
