@@ -97,3 +97,18 @@ tasks:
     dir: '{{.ROOT_DIR}}/packages/client'
     cmds:
       - cargo publish
+
+  docker-middleware-build:
+    desc: Build the middleware Docker image as warpdrive-stellar-middleware:dev
+    cmds:
+      - docker build -t warpdrive-stellar-middleware:dev -f docker/middleware/Dockerfile .
+
+  docker-middleware-testnet:
+    desc: Build the middleware image (:dev) and run a testnet deploy smoke test against soroban-testnet
+    deps: [docker-middleware-build]
+    cmds:
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh deploy --output-path /out/deploy.json
+      # smoke.sh runs the container as root, so the manifest lands root-owned. Chown it back so host tools can read it.
+      - docker run --rm -v "$PWD/out:/out" warpdrive-stellar-middleware:dev chown -R "$(id -u):$(id -g)" /out
+      - jq -e '.contracts | has("project_root") and has("ethereum_handler") and has("stellar_handler")' out/deploy.json >/dev/null
+      - echo "Testnet deploy via :dev image succeeded — manifest at out/deploy.json"
