@@ -280,13 +280,28 @@ docker run --rm \
 
 Should print the same G... as `jq -r .admin out/deploy.json`.
 
-### 5. Tear down (local mode)
+### 5. Tear down
+
+Testnet / BYOK (manual `docker run`):
+
+```bash
+docker rm -f wdm
+```
+
+Local Quickstart (compose):
+
+```bash
+docker compose -f docker/middleware/docker-compose.yml down
+```
+
+Local Quickstart (smoke.sh):
 
 ```bash
 ./docker/middleware/smoke.sh down
 ```
 
-Stops the Quickstart sidecar and removes `wdnet`. Does not touch
-`./out/` so the next `smoke.sh deploy` reuses the same identity (against
-a fresh Quickstart, which means previously deployed contract IDs in
-`out/deploy.json` will be invalid — re-run `deploy` to refresh).
+All variants leave `./out/` (and `./out/.keys/`) intact, so the next
+`deploy` against testnet reuses the same friendbot-funded identity. For
+local Quickstart the chain is wiped, so the contract IDs in
+`out/deploy.json` from a prior session are invalid — re-run `deploy` to
+refresh.
