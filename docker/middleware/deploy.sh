@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Deploy all 7 Warpdrive Soroban contracts and emit a JSON manifest.
+# Deploy a Warpdrive Soroban contract pipeline and emit a JSON manifest.
 # Ported from taskfiles/testnet.yml:24 (testnet:deploy).
+#
+# By default deploys only the Ethereum (secp256k1) pipeline + project-root
+# (4 contracts). Pass --variant stellar for the Soroban-native (ed25519)
+# pipeline + project-root, or --variant both for all 7 contracts.
 #
 # Idempotent: each contract ID is checkpointed to OUTPUT_PATH as soon as
 # it is deployed. If the script is re-run with the same --output-path
@@ -16,11 +20,16 @@ set -euo pipefail
 . /warpdrive/common.sh
 
 OUTPUT_PATH=""
+VARIANT="ethereum"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --output-path)
             OUTPUT_PATH="${2:-}"
+            shift 2
+            ;;
+        --variant)
+            VARIANT="${2:-}"
             shift 2
             ;;
         *)
@@ -31,6 +40,14 @@ done
 
 [ -n "$OUTPUT_PATH" ] || die "--output-path is required"
 
+case "$VARIANT" in
+    ethereum) DEPLOY_ETH=1; DEPLOY_XLM=0; VERIFICATION_TYPE_DEFAULT=1 ;;
+    stellar)  DEPLOY_ETH=0; DEPLOY_XLM=1; VERIFICATION_TYPE_DEFAULT=2 ;;
+    both)     DEPLOY_ETH=1; DEPLOY_XLM=1; VERIFICATION_TYPE_DEFAULT=1 ;;
+    "")       die "--variant must not be empty (want ethereum|stellar|both)" ;;
+    *)        die "invalid --variant: $VARIANT (want ethereum|stellar|both)" ;;
+esac
+
 require_env RPC_URL NETWORK_PASSPHRASE
 resolve_deployer
 
@@ -39,7 +56,9 @@ SECP_THRESHOLD_NUM="${SECP_THRESHOLD_NUM:-2}"
 SECP_THRESHOLD_DEN="${SECP_THRESHOLD_DEN:-3}"
 ED_THRESHOLD_NUM="${ED_THRESHOLD_NUM:-2}"
 ED_THRESHOLD_DEN="${ED_THRESHOLD_DEN:-3}"
-VERIFICATION_TYPE="${VERIFICATION_TYPE:-1}"  # 1 = Ethereum
+# 1 = Ethereum, 2 = Stellar. Defaults follow --variant; explicit env wins
+# (e.g. --variant both with VERIFICATION_TYPE=2 to point project_root at ed25519).
+VERIFICATION_TYPE="${VERIFICATION_TYPE:-$VERIFICATION_TYPE_DEFAULT}"
 
 echo "deploying as admin: $ADMIN_ADDRESS" >&2
 
@@ -82,6 +101,7 @@ persist_manifest() {
         --arg admin "$ADMIN_ADDRESS" \
         --arg rpc_url "$RPC_URL" \
         --arg network_passphrase "$NETWORK_PASSPHRASE" \
+        --arg variant "$VARIANT" \
         --arg secp_security "$SECP_SECURITY_ID" \
         --arg secp_verification "$SECP_VERIFICATION_ID" \
         --arg eth_handler "$ETH_HANDLER_ID" \
@@ -93,6 +113,7 @@ persist_manifest() {
             admin: $admin,
             rpc_url: $rpc_url,
             network_passphrase: $network_passphrase,
+            variant: $variant,
             contracts: ({
                 secp256k1_security: $secp_security,
                 secp256k1_verification: $secp_verification,
@@ -142,36 +163,53 @@ deploy_step() {
 
 load_existing
 
-deploy_step "secp256k1-security" SECP_SECURITY_ID warpdrive_secp256k1_security.wasm \
-    --admin "$ADMIN_ADDRESS" \
-    --threshold_numerator "$SECP_THRESHOLD_NUM" \
-    --threshold_denominator "$SECP_THRESHOLD_DEN"
+if [ "$DEPLOY_ETH" -eq 1 ]; then
+    deploy_step "secp256k1-security" SECP_SECURITY_ID warpdrive_secp256k1_security.wasm \
+        --admin "$ADMIN_ADDRESS" \
+        --threshold_numerator "$SECP_THRESHOLD_NUM" \
+        --threshold_denominator "$SECP_THRESHOLD_DEN"
 
-deploy_step "secp256k1-verification" SECP_VERIFICATION_ID warpdrive_secp256k1_verification.wasm \
-    --admin "$ADMIN_ADDRESS" \
-    --security_contract "$SECP_SECURITY_ID"
+    deploy_step "secp256k1-verification" SECP_VERIFICATION_ID warpdrive_secp256k1_verification.wasm \
+        --admin "$ADMIN_ADDRESS" \
+        --security_contract "$SECP_SECURITY_ID"
 
-deploy_step "ethereum-handler" ETH_HANDLER_ID warpdrive_ethereum_handler.wasm \
-    --admin "$ADMIN_ADDRESS" \
-    --verification_contract "$SECP_VERIFICATION_ID"
+    deploy_step "ethereum-handler" ETH_HANDLER_ID warpdrive_ethereum_handler.wasm \
+        --admin "$ADMIN_ADDRESS" \
+        --verification_contract "$SECP_VERIFICATION_ID"
+fi
 
-deploy_step "ed25519-security" ED_SECURITY_ID warpdrive_ed25519_security.wasm \
-    --admin "$ADMIN_ADDRESS" \
-    --threshold_numerator "$ED_THRESHOLD_NUM" \
-    --threshold_denominator "$ED_THRESHOLD_DEN"
+if [ "$DEPLOY_XLM" -eq 1 ]; then
+    deploy_step "ed25519-security" ED_SECURITY_ID warpdrive_ed25519_security.wasm \
+        --admin "$ADMIN_ADDRESS" \
+        --threshold_numerator "$ED_THRESHOLD_NUM" \
+        --threshold_denominator "$ED_THRESHOLD_DEN"
 
-deploy_step "ed25519-verification" ED_VERIFICATION_ID warpdrive_ed25519_verification.wasm \
-    --admin "$ADMIN_ADDRESS" \
-    --security_contract "$ED_SECURITY_ID"
+    deploy_step "ed25519-verification" ED_VERIFICATION_ID warpdrive_ed25519_verification.wasm \
+        --admin "$ADMIN_ADDRESS" \
+        --security_contract "$ED_SECURITY_ID"
 
-deploy_step "stellar-handler" XLM_HANDLER_ID warpdrive_stellar_handler.wasm \
-    --admin "$ADMIN_ADDRESS" \
-    --verification_contract "$ED_VERIFICATION_ID"
+    deploy_step "stellar-handler" XLM_HANDLER_ID warpdrive_stellar_handler.wasm \
+        --admin "$ADMIN_ADDRESS" \
+        --verification_contract "$ED_VERIFICATION_ID"
+fi
+
+# project-root is pinned to one variant. For ethereum and both, that's the
+# secp pipeline (preserves prior behavior); for stellar, the ed25519 pipeline.
+case "$VARIANT" in
+    stellar)
+        ROOT_SECURITY_ID="$ED_SECURITY_ID"
+        ROOT_VERIFICATION_ID="$ED_VERIFICATION_ID"
+        ;;
+    *)
+        ROOT_SECURITY_ID="$SECP_SECURITY_ID"
+        ROOT_VERIFICATION_ID="$SECP_VERIFICATION_ID"
+        ;;
+esac
 
 deploy_step "project-root" PROJECT_ROOT_ID warpdrive_project_root.wasm \
     --admin "$ADMIN_ADDRESS" \
-    --security_contract "$SECP_SECURITY_ID" \
-    --verification_contract "$SECP_VERIFICATION_ID" \
+    --security_contract "$ROOT_SECURITY_ID" \
+    --verification_contract "$ROOT_VERIFICATION_ID" \
     --project_spec_repo "$PROJECT_SPEC_REPO" \
     --verification_type "$VERIFICATION_TYPE"
 

@@ -118,7 +118,7 @@ docker run -d --rm --name wdm \
 
 | Subcommand | Args | Effect |
 |---|---|---|
-| `deploy` | `--output-path <file>` | Deploys all 7 contracts; writes a JSON manifest to `<file>`. |
+| `deploy` | `--output-path <file> [--variant <ethereum\|stellar\|both>]` | Deploys a contract pipeline; writes a JSON manifest to `<file>`. Default `ethereum` deploys the secp256k1 pipeline + project-root (4 contracts); `stellar` deploys the ed25519 pipeline + project-root (4 contracts); `both` deploys all 7 with project-root pinned to the secp256k1 pipeline (prior behaviour). |
 | `add-signer` | `--scheme {secp256k1,ed25519} --key <hex> --weight <u32> --deploy-file <path>` | Registers (or updates) a signer on the matching security contract. |
 | `remove-signer` | `--scheme ... --key <hex> --deploy-file <path>` | Removes a signer. |
 | `set-threshold` | `--scheme ... --numerator <u32> --denominator <u32> --deploy-file <path>` | Sets the consensus fraction. |
@@ -162,13 +162,16 @@ docker exec wdm /warpdrive/cli.sh set-project-spec-repo \
 | `PROJECT_SPEC_REPO` | deploy (optional) | URL written into project-root at init. Default: warp-driver/warpdrive-contracts. |
 | `SECP_THRESHOLD_NUM` / `SECP_THRESHOLD_DEN` | deploy (optional) | Initial threshold on secp256k1 security. Default `2/3`. |
 | `ED_THRESHOLD_NUM` / `ED_THRESHOLD_DEN` | deploy (optional) | Initial threshold on ed25519 security. Default `2/3`. |
-| `VERIFICATION_TYPE` | deploy (optional) | Enum value written into project-root. Default `1` (Ethereum). |
+| `VERIFICATION_TYPE` | deploy (optional) | Enum value written into project-root. Defaults follow `--variant` (`1`=Ethereum for `ethereum`/`both`, `2`=Stellar for `stellar`); set explicitly to override (e.g. `--variant both` with `VERIFICATION_TYPE=2`). |
 | `INCLUSION_FEE` | all invocations | Default `10000000` stroops. |
 | `MAX_RETRIES` / `RETRY_SLEEP_SECONDS` | all invocations | Retry config for RPC hiccups. Default `3` / `5`. |
 
 ## Output manifest
 
-`deploy` writes:
+`deploy` writes the IDs of whichever contracts it deployed. Keys whose
+contracts were not part of the chosen `--variant` are omitted. With
+`--variant both` (or after re-running multiple variants against the same
+manifest) all seven keys appear:
 
 ```json
 {
@@ -207,8 +210,15 @@ jq . out/deploy.json
 ```
 
 First run on testnet generates + friendbot-funds `warpdrive-deployer` and
-deploys the 7 contracts. Subsequent calls reuse the same identity. Expect
-7 contract IDs plus `admin`, `rpc_url`, `network_passphrase`.
+deploys the default Ethereum (secp256k1) pipeline plus project-root —
+4 contracts. Subsequent calls reuse the same identity.
+
+To deploy the Stellar (ed25519) pipeline instead, or both pipelines:
+
+```bash
+./docker/middleware/smoke.sh deploy --variant stellar --output-path /out/deploy.json
+./docker/middleware/smoke.sh deploy --variant both    --output-path /out/deploy.json
+```
 
 For local Quickstart:
 
