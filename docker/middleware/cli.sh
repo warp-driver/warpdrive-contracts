@@ -11,8 +11,12 @@ usage() {
 usage: cli.sh <subcommand> [args]
 
 subcommands:
-  deploy         --output-path <file>
-                 Deploy all 7 Soroban contracts to the configured network.
+  deploy         --output-path <file> [--variant <ethereum|stellar|both>]
+                 Deploy a Soroban contract pipeline to the configured network.
+                 Variant 'ethereum' (default) deploys the secp256k1 pipeline +
+                 project-root (4 contracts); 'stellar' deploys the ed25519
+                 pipeline + project-root (4 contracts); 'both' deploys all 7
+                 with project-root pinned to the secp256k1 pipeline.
                  Env: RPC_URL, NETWORK_PASSPHRASE, DEPLOYER_SECRET,
                       [PROJECT_SPEC_REPO]
 
