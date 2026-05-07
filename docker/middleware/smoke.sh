@@ -3,8 +3,8 @@
 #
 # Defaults to testnet (https://soroban-testnet.stellar.org). Pass
 # `--network local` as the first arg to spin up a local Stellar Quickstart
-# sidecar (`stellar/quickstart:latest` on docker network `wdnet`) — useful
-# for offline iteration but slower to bootstrap.
+# sidecar on docker network `wdnet` — useful for offline iteration but
+# slower to bootstrap.
 #
 # Persists the generated identity + output JSON across invocations via host
 # bind mounts, so subsequent calls reuse the same admin.
@@ -22,7 +22,7 @@
 #   KEYS_DIR             host dir mounted at /root/.config/soroban
 #                        (default: ./out/.keys)
 #   IMAGE                middleware image (default: warpdrive-stellar-middleware:dev)
-#   QUICKSTART_IMAGE     local mode only (default: stellar/quickstart:latest)
+#   QUICKSTART_IMAGE     local mode only; overrides the pinned default
 #   QUICKSTART_NAME      local mode only (default: stellar)
 #   DOCKER_NETWORK       local mode only (default: wdnet)
 #   QUICKSTART_TIMEOUT   seconds to wait for Quickstart RPC (default: 180)
@@ -46,7 +46,7 @@ esac
 OUT_DIR="${OUT_DIR:-$(pwd)/out}"
 KEYS_DIR="${KEYS_DIR:-$OUT_DIR/.keys}"
 IMAGE="${IMAGE:-warpdrive-stellar-middleware:dev}"
-QUICKSTART_IMAGE="${QUICKSTART_IMAGE:-stellar/quickstart:latest}"
+QUICKSTART_IMAGE="${QUICKSTART_IMAGE:-stellar/quickstart:v637-b1021.1-latest}"
 QUICKSTART_NAME="${QUICKSTART_NAME:-stellar}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-wdnet}"
 QUICKSTART_TIMEOUT="${QUICKSTART_TIMEOUT:-180}"
