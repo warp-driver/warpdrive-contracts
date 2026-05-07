@@ -1,0 +1,40 @@
+name: warpdrive-stellar-middleware
+
+services:
+  stellar:
+    image: stellar/quickstart:latest
+    container_name: stellar
+    command: ["--local"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -X POST -H 'Content-Type: application/json'
+          -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}'
+          http://localhost:8000/rpc | grep -q '"status":"healthy"'
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+
+  wdm:
+    image: ghcr.io/warp-driver/warpdrive-stellar-middleware:latest
+    container_name: wdm
+    pull_policy: always
+    depends_on:
+      stellar:
+        condition: service_healthy
+    environment:
+      RPC_URL: http://stellar:8000/rpc
+      NETWORK_PASSPHRASE: "Standalone Network ; February 2017"
+      FRIENDBOT_URL: http://stellar:8000/friendbot
+    volumes:
+      - ${PWD}/out:/out
+
+# Pin the default network name so the manual cross-check step in README
+# (which uses `--network wdnet`) works against compose-managed services.
+networks:
+  default:
+    name: wdnet
