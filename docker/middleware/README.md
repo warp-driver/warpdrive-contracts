@@ -55,7 +55,29 @@ docker run -d --rm --name wdm \
 
 Quickstart and the middleware run as siblings on a shared docker network so
 the middleware can resolve `stellar` by name. `smoke.sh --network local`
-(see below) wraps this for you; the manual flow is:
+(see below) wraps this for you; for a persistent local environment, use
+`docker compose`:
+
+```bash
+docker compose -f docker/middleware/docker-compose.yml up -d
+# `wdm` won't start until stellar's RPC healthcheck passes.
+
+# Restart the middleware (e.g. config refresh) without touching the local network:
+docker compose -f docker/middleware/docker-compose.yml restart wdm
+
+# Upgrade the middleware to a newer :latest without restarting stellar:
+docker compose -f docker/middleware/docker-compose.yml pull wdm
+docker compose -f docker/middleware/docker-compose.yml up -d wdm
+
+# Tear everything down (host bind mount `./out/` is preserved):
+docker compose -f docker/middleware/docker-compose.yml down
+```
+
+The compose project pins its default network to `wdnet` so the cross-check
+step further down still resolves `stellar:8000` from a transient
+`docker run --network wdnet`.
+
+For power users / debugging, the raw equivalent:
 
 ```bash
 docker network create wdnet
