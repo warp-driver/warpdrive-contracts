@@ -1,4 +1,4 @@
-use soroban_rs::ContractId;
+use wasi_soroban_rs::ContractId;
 use std::fmt;
 use std::fs;
 use std::path::Path;
