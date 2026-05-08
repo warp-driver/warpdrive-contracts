@@ -5,8 +5,8 @@
 //!
 //! Import `IntoScValExt` and call `.into_val_ext()` to get a `ScVal`.
 
-use soroban_rs::SorobanHelperError;
-use soroban_rs::xdr::{
+use wasi_soroban_rs::SorobanHelperError;
+use wasi_soroban_rs::xdr::{
     BytesM, Int128Parts, Int256Parts, ScBytes, ScError, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec,
     StringM, TimePoint, UInt128Parts, UInt256Parts, VecM,
 };

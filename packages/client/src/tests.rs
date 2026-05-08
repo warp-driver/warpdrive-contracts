@@ -9,7 +9,7 @@
 //! the on-wire contract ABI is mismatched and the client will fail at
 //! simulation time.
 
-use soroban_rs::xdr::{Limits as ClientLimits, ScVal as ClientScVal, WriteXdr};
+use wasi_soroban_rs::xdr::{Limits as ClientLimits, ScVal as ClientScVal, WriteXdr};
 use soroban_sdk::xdr::{Limits as SdkLimits, ReadXdr, ScVal as SdkScVal};
 use soroban_sdk::{Address, Bytes, BytesN, Env, String as SdkString, TryFromVal, TryIntoVal, Val};
 
@@ -30,7 +30,7 @@ fn to_sdk(client: ClientScVal) -> SdkScVal {
 
 fn from_sdk(sdk: &SdkScVal) -> ClientScVal {
     let bytes = soroban_sdk::xdr::WriteXdr::to_xdr(sdk, SdkLimits::none()).expect("sdk xdr");
-    <ClientScVal as soroban_rs::xdr::ReadXdr>::from_xdr(&bytes, ClientLimits::none())
+    <ClientScVal as wasi_soroban_rs::xdr::ReadXdr>::from_xdr(&bytes, ClientLimits::none())
         .expect("client parse")
 }
 
@@ -122,7 +122,7 @@ fn event_id_decodes_as_bytesn_20() {
 
 #[test]
 fn wasm_hash_decodes_as_bytesn_32() {
-    use soroban_rs::IntoScVal;
+    use wasi_soroban_rs::IntoScVal;
     let env = Env::default();
     let client: [u8; 32] = [7u8; 32];
     let sdk_scval = to_sdk(client.into_val());
@@ -133,7 +133,7 @@ fn wasm_hash_decodes_as_bytesn_32() {
 
 #[test]
 fn version_string_decodes_as_soroban_string() {
-    use soroban_rs::IntoScVal;
+    use wasi_soroban_rs::IntoScVal;
     let env = Env::default();
     let client = "v1.2.3".to_string();
     let sdk_scval = to_sdk(client.clone().into_val());
@@ -195,7 +195,7 @@ fn xlm_envelope_bytes_roundtrip_through_xdr() {
 
 #[test]
 fn contract_address_decodes_to_client_contract_id() {
-    use soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress};
+    use wasi_soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress};
 
     let env = Env::default();
     let contract_bytes = [0x42u8; 32];
@@ -214,7 +214,7 @@ fn contract_address_decodes_to_client_contract_id() {
 
 #[test]
 fn account_address_decodes_to_client_account_id() {
-    use soroban_rs::xdr::{AccountId, PublicKey, ScAddress, Uint256};
+    use wasi_soroban_rs::xdr::{AccountId, PublicKey, ScAddress, Uint256};
 
     let env = Env::default();
     let sdk_scval = to_sdk_scval(&env, account_address(&env));
@@ -241,7 +241,7 @@ fn option_address_none_decodes_to_void() {
 
 #[test]
 fn option_address_some_decodes_to_address() {
-    use soroban_rs::xdr::ScAddress;
+    use wasi_soroban_rs::xdr::ScAddress;
 
     let env = Env::default();
     let some: Option<Address> = Some(account_address(&env));
@@ -255,7 +255,7 @@ fn option_address_some_decodes_to_address() {
 
 #[test]
 fn contract_string_decodes_to_rust_string() {
-    use soroban_rs::xdr::{ScString, ScVal};
+    use wasi_soroban_rs::xdr::{ScString, ScVal};
 
     let env = Env::default();
     let expected = "soroban";
@@ -281,7 +281,7 @@ fn option_bytes_none_decodes_to_void() {
 
 #[test]
 fn option_bytes_some_decodes_to_bytes() {
-    use soroban_rs::xdr::{ScBytes, ScVal};
+    use wasi_soroban_rs::xdr::{ScBytes, ScVal};
 
     let env = Env::default();
     let some: Option<Bytes> = Some(Bytes::from_slice(&env, &[1, 2, 3, 4, 5]));

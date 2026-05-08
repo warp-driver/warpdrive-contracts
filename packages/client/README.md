@@ -32,7 +32,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 ```rust
 use ed25519_dalek::SigningKey;
-use soroban_rs::{Account, ClientContractConfigs, Env, EnvConfigs, Signer};
+use wasi_soroban_rs::{Account, ClientContractConfigs, Env, EnvConfigs, Signer};
 use warpdrive_client::loader::testnet;
 use warpdrive_client::secp256k1_security::Secp256k1SecurityClient;
 

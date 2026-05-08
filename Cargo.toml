@@ -21,7 +21,7 @@ repository = "https://github.com/warp-driver/warpdrive-contracts"
 rust-version = "1.90.0"
 
 [workspace.dependencies]
-soroban-sdk = "25.3.0"
+soroban-sdk = "26.0"
 warpdrive-client = { path = "packages/client" }
 warpdrive-shared = { path = "packages/shared" }
 warpdrive-secp256k1-security = { path = "contracts/secp256k1-security" }

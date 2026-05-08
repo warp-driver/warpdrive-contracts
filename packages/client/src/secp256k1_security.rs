@@ -1,7 +1,7 @@
 use std::fmt;
 
-use soroban_rs::xdr::{ScBytes, ScMap, ScMapEntry, ScVal, ScVec};
-use soroban_rs::{ClientContractConfigs, SorobanHelperError, SorobanTransactionResponse};
+use wasi_soroban_rs::xdr::{ScBytes, ScMap, ScMapEntry, ScVal, ScVec};
+use wasi_soroban_rs::{ClientContractConfigs, SorobanHelperError, SorobanTransactionResponse};
 
 use crate::scval::IntoScValExt;
 use crate::utils::{execute, query, unexpected};

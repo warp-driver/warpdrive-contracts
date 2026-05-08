@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use soroban_rs::xdr::{ScAddress, ScString, ScVal};
-use soroban_rs::{ClientContractConfigs, IntoScVal, SorobanHelperError};
+use wasi_soroban_rs::xdr::{ScAddress, ScString, ScVal};
+use wasi_soroban_rs::{ClientContractConfigs, IntoScVal, SorobanHelperError};
 
 use crate::utils::{execute, query, unexpected};
 

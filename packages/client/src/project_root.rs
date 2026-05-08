@@ -1,5 +1,5 @@
-use soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress, ScString, ScVal};
-use soroban_rs::{
+use wasi_soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress, ScString, ScVal};
+use wasi_soroban_rs::{
     ClientContractConfigs, ContractId, IntoScVal, SorobanHelperError, SorobanTransactionResponse,
 };
 

@@ -1,8 +1,8 @@
-use soroban_rs::xdr::{
+use wasi_soroban_rs::xdr::{
     InvokeHostFunctionOp, OperationBody, ScVal, SorobanAuthorizationEntry, SorobanCredentials,
     Transaction, TransactionEnvelope, TransactionExt, TransactionV1Envelope, VecM,
 };
-use soroban_rs::{
+use wasi_soroban_rs::{
     ClientContractConfigs, Env, Operations, SorobanHelperError, SorobanTransactionResponse,
     TransactionBuilder,
 };
@@ -118,7 +118,7 @@ pub async fn execute(
 
 fn attach_auth_from_simulation(
     tx: &mut Transaction,
-    sim_results: &[soroban_rs::stellar_rpc_client::SimulateHostFunctionResult],
+    sim_results: &[wasi_soroban_rs::wasi_stellar_rpc_client::SimulateHostFunctionResult],
 ) -> Result<(), SorobanHelperError> {
     let mut ops: Vec<_> = tx.operations.iter().cloned().collect();
     let mut result_idx = 0;
