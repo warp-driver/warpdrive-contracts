@@ -51,7 +51,9 @@ esac
 require_env RPC_URL NETWORK_PASSPHRASE
 resolve_deployer
 
-PROJECT_SPEC_REPO="${PROJECT_SPEC_REPO:-https://github.com/warp-driver/warpdrive-contracts}"
+# URI the off-chain warpdrive dispatcher fetches and deserializes as the
+# project's Service JSON
+PROJECT_SPEC_REPO="${PROJECT_SPEC_REPO:-ipfs://REPLACE_ME}"
 SECP_THRESHOLD_NUM="${SECP_THRESHOLD_NUM:-2}"
 SECP_THRESHOLD_DEN="${SECP_THRESHOLD_DEN:-3}"
 ED_THRESHOLD_NUM="${ED_THRESHOLD_NUM:-2}"

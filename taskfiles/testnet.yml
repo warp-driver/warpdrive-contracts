@@ -148,7 +148,7 @@ tasks:
           --admin $ADMIN \
           --security_contract $SECURITY_ID \
           --verification_contract $VERIFICATION_ID \
-          --project_spec_repo "https://github.com/warp-driver/warpdrive-contracts" \
+          --project_spec_repo "ipfs://REPLACE_ME" \
           --verification_type 1) # VerificationType::Ethereum (CLI doesn't support enum names)
         echo "$PROJECT_ROOT_ID" > {{.STATE_DIR}}/project-root.id
         echo "Project Root: $PROJECT_ROOT_ID"
