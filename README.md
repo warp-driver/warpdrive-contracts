@@ -36,7 +36,9 @@ Handler --> Verification --> Security
 | Package | Description |
 |---------|-------------|
 | [Shared](./packages/shared/) | Shared library providing contract interfaces, admin transfer logic, checkpoint storage, and test utilities |
-| [Client](./packages/client/) | Type-safe async Rust clients (`std`, off-chain) for invoking the deployed WarpDrive contracts via [`soroban-rs`](https://crates.io/crates/soroban-rs); not a contract — does not compile to WASM |
+| [Client](./packages/client/) | Type-safe async Rust clients (`std`, off-chain) for invoking the deployed WarpDrive contracts via [`wasi-soroban-rs`](https://crates.io/crates/wasi-soroban-rs); not a contract — does not compile to WASM |
+
+> **Note:** The client (and any downstream code consuming it) must depend on the `wasi-soroban-rs` / `wasi-stellar-rpc-client` forks rather than upstream `soroban-rs` / `stellar-rpc-client`. The forks replace `reqwest` and other non-WASI-compatible transports so the client can be compiled to a `wasm32-wasip2` component and run inside a WASI runtime. Using the upstream crates will break component builds.
 
 
 ## Architecture

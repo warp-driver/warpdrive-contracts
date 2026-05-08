@@ -25,12 +25,30 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: Build contracts
-        run: task build
+        run: task build-contracts
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
         with:
           name: wasm-contracts
           path: target/wasm32v1-none/release/*.wasm
+
+  build-client:
+    name: Build client (native and wasi)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-wasip2
+      - name: Install Task
+        uses: arduino/setup-task@v2
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Build client
+        run: task build-client
 
   test:
     name: Run tests
