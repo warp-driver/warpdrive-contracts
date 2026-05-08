@@ -1938,7 +1938,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-ed25519-security"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "soroban-sdk",
  "warpdrive-shared",
@@ -1946,7 +1946,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-ed25519-verification"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "soroban-sdk",
  "warpdrive-ed25519-security",
@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-ethereum-handler"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -1968,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-project-root"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "soroban-sdk",
  "warpdrive-secp256k1-security",
@@ -1978,7 +1978,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-secp256k1-security"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "soroban-sdk",
  "warpdrive-shared",
@@ -1986,7 +1986,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-secp256k1-verification"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "soroban-sdk",
  "warpdrive-secp256k1-security",
@@ -1995,7 +1995,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-shared"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "ed25519-dalek",
  "k256",
@@ -2006,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-stellar-handler"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "soroban-sdk",
  "warpdrive-ed25519-security",

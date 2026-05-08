@@ -14,11 +14,11 @@ default-members = [
 
 [workspace.package]
 edition = "2024"
-version = "0.2.3"
+version = "0.2.4"
 license = "GPL-3.0-or-later"
 authors = ["WarpDrive"]
 repository = "https://github.com/warp-driver/warpdrive-contracts"
-rust-version = "1.90.0"
+rust-version = "1.93.0"
 
 [workspace.dependencies]
 soroban-sdk = "26.0"

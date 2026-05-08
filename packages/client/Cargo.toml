@@ -2,7 +2,7 @@
 name = "warpdrive-client"
 description = "Soroban-rs clients for WarpDrive Stellar contracts"
 edition = "2024"
-version = "0.2.3"
+version = "0.2.4"
 license = "GPL-3.0-or-later"
 authors = ["WarpDrive"]
 repository = "https://github.com/warp-driver/warpdrive-contracts"
@@ -13,8 +13,8 @@ crate-type = ["rlib"]
 
 [dependencies]
 ed25519-dalek = "2.2.0"
-wasi-soroban-rs = "0.2.6"
-wasi-soroban-rs-macros = "0.2.4"
+wasi-soroban-rs = "0.2.7"
+wasi-soroban-rs-macros = "0.2.7"
 stellar-strkey = "0.0.16"
 tokio = { version = "1.52" }
 
