@@ -127,6 +127,6 @@ tasks:
       - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh deploy --variant stellar --output-path /out/deploy-stellar.json
       # smoke.sh runs the container as root, so manifests land root-owned. Chown them back so host tools can read them.
       - docker run --rm -v "$PWD/out:/out" warpdrive-stellar-middleware:dev chown -R "$(id -u):$(id -g)" /out
-      - jq -e '.contracts | has("project_root") and has("ethereum_handler") and (has("stellar_handler") | not) and (has("ed25519_security") | not)' out/deploy.json >/dev/null
-      - jq -e '.contracts | has("project_root") and has("stellar_handler") and (has("ethereum_handler") | not) and (has("secp256k1_security") | not)' out/deploy-stellar.json >/dev/null
+      - jq -e '.contracts | has("project_root") and has("secp256k1_security") and (has("ed25519_security") | not)' out/deploy.json >/dev/null
+      - jq -e '.contracts | has("project_root") and has("ed25519_security") and (has("secp256k1_security") | not)' out/deploy-stellar.json >/dev/null
       - echo "Testnet deploy smoke succeeded — default ethereum manifest at out/deploy.json, stellar variant at out/deploy-stellar.json"
