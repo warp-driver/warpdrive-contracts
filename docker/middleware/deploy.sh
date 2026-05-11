@@ -70,10 +70,8 @@ mkdir -p "$(dirname "$OUTPUT_PATH")"
 
 SECP_SECURITY_ID=""
 SECP_VERIFICATION_ID=""
-ETH_HANDLER_ID=""
 ED_SECURITY_ID=""
 ED_VERIFICATION_ID=""
-XLM_HANDLER_ID=""
 PROJECT_ROOT_ID=""
 
 # Restore any previously-deployed contract IDs so a re-run skips the
@@ -86,10 +84,8 @@ load_existing() {
     fi
     SECP_SECURITY_ID=$(jq -r '.contracts.secp256k1_security // ""' "$OUTPUT_PATH")
     SECP_VERIFICATION_ID=$(jq -r '.contracts.secp256k1_verification // ""' "$OUTPUT_PATH")
-    ETH_HANDLER_ID=$(jq -r '.contracts.ethereum_handler // ""' "$OUTPUT_PATH")
     ED_SECURITY_ID=$(jq -r '.contracts.ed25519_security // ""' "$OUTPUT_PATH")
     ED_VERIFICATION_ID=$(jq -r '.contracts.ed25519_verification // ""' "$OUTPUT_PATH")
-    XLM_HANDLER_ID=$(jq -r '.contracts.stellar_handler // ""' "$OUTPUT_PATH")
     PROJECT_ROOT_ID=$(jq -r '.contracts.project_root // ""' "$OUTPUT_PATH")
 }
 
@@ -106,10 +102,8 @@ persist_manifest() {
         --arg variant "$VARIANT" \
         --arg secp_security "$SECP_SECURITY_ID" \
         --arg secp_verification "$SECP_VERIFICATION_ID" \
-        --arg eth_handler "$ETH_HANDLER_ID" \
         --arg ed_security "$ED_SECURITY_ID" \
         --arg ed_verification "$ED_VERIFICATION_ID" \
-        --arg xlm_handler "$XLM_HANDLER_ID" \
         --arg project_root "$PROJECT_ROOT_ID" \
         '{
             admin: $admin,
@@ -119,10 +113,8 @@ persist_manifest() {
             contracts: ({
                 secp256k1_security: $secp_security,
                 secp256k1_verification: $secp_verification,
-                ethereum_handler: $eth_handler,
                 ed25519_security: $ed_security,
                 ed25519_verification: $ed_verification,
-                stellar_handler: $xlm_handler,
                 project_root: $project_root
             } | with_entries(select(.value != "")))
         }' \
@@ -174,10 +166,6 @@ if [ "$DEPLOY_ETH" -eq 1 ]; then
     deploy_step "secp256k1-verification" SECP_VERIFICATION_ID warpdrive_secp256k1_verification.wasm \
         --admin "$ADMIN_ADDRESS" \
         --security_contract "$SECP_SECURITY_ID"
-
-    deploy_step "ethereum-handler" ETH_HANDLER_ID warpdrive_ethereum_handler.wasm \
-        --admin "$ADMIN_ADDRESS" \
-        --verification_contract "$SECP_VERIFICATION_ID"
 fi
 
 if [ "$DEPLOY_XLM" -eq 1 ]; then
@@ -189,10 +177,6 @@ if [ "$DEPLOY_XLM" -eq 1 ]; then
     deploy_step "ed25519-verification" ED_VERIFICATION_ID warpdrive_ed25519_verification.wasm \
         --admin "$ADMIN_ADDRESS" \
         --security_contract "$ED_SECURITY_ID"
-
-    deploy_step "stellar-handler" XLM_HANDLER_ID warpdrive_stellar_handler.wasm \
-        --admin "$ADMIN_ADDRESS" \
-        --verification_contract "$ED_VERIFICATION_ID"
 fi
 
 # project-root is pinned to one variant. For ethereum and both, that's the
