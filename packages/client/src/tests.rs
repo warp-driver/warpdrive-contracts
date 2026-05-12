@@ -200,6 +200,23 @@ fn xlm_envelope_bytes_roundtrip_through_xdr() {
     assert_eq!(parsed.payload, payload);
 }
 
+#[test]
+fn xlm_envelope_new_encode_decode_roundtrip_no_env() {
+    // Round-trip through the convenience methods with `env: None` — exercises
+    // both the plain-bytes API and the implicit `Env::default()` fallback.
+    let payload = std::vec![0xaa, 0xbb, 0xcc];
+    let event_id = [11u8; 20];
+    let ordering = [12u8; 12];
+
+    let bytes = XlmEnvelope::new(None, payload.clone(), event_id, ordering).encode(None);
+    let parsed = XlmEnvelope::decode(None, &bytes).expect("decode envelope");
+
+    assert_eq!(parsed.event_id.to_array(), event_id);
+    assert_eq!(parsed.ordering.to_array(), ordering);
+    let payload_out: std::vec::Vec<u8> = parsed.payload.iter().collect();
+    assert_eq!(payload_out, payload);
+}
+
 // ── Return values: contract → client ────────────────────────────────────
 
 #[test]
