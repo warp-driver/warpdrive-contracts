@@ -1,8 +1,8 @@
 // This file runs some queries on the testnet deploy
 
 use ed25519_dalek::SigningKey;
-use wasi_soroban_rs::{Account, ClientContractConfigs, Env, EnvConfigs, Signer};
 use warpdrive_client::loader::testnet;
+use wasi_soroban_rs::{Account, ClientContractConfigs, Env, EnvConfigs, Signer};
 
 use warpdrive_client::ethereum_handler::EthereumHandlerClient;
 use warpdrive_client::project_root::ProjectRootClient;

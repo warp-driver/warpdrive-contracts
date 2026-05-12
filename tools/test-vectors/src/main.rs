@@ -11,7 +11,7 @@ use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Bytes, BytesN, Env};
-use warpdrive_shared::interfaces::handler::XlmEnvelope;
+use warpdrive_shared::interfaces::handler::{MessageWithId, XlmEnvelope};
 
 sol! {
     struct Envelope {
@@ -19,6 +19,17 @@ sol! {
         bytes12 ordering;
         bytes payload;
     }
+
+    type TriggerId is uint64;
+
+    struct DataWithId {
+        TriggerId triggerId;
+        bytes data;
+    }
+}
+
+fn trigger_id_for(seed: u8) -> u64 {
+    seed as u64 + 1000
 }
 
 // ── Secp256k1 helpers ──────────────────────────────────────────────
@@ -58,10 +69,15 @@ fn make_eth_envelope(event_id_seed: u8) -> (Vec<u8>, [u8; 20]) {
     let mut event_id = [0u8; 20];
     event_id[0] = event_id_seed;
 
+    let inner = DataWithId {
+        triggerId: trigger_id_for(event_id_seed),
+        data: vec![event_id_seed; 8].into(),
+    };
+
     let envelope = Envelope {
         eventId: FixedBytes(event_id),
         ordering: FixedBytes([0u8; 12]),
-        payload: vec![event_id_seed; 8].into(),
+        payload: inner.abi_encode().into(),
     };
 
     (envelope.abi_encode(), event_id)
@@ -94,10 +110,15 @@ fn make_xlm_envelope(env: &Env, event_id_seed: u8) -> (Vec<u8>, [u8; 20]) {
     let mut event_id = [0u8; 20];
     event_id[0] = event_id_seed;
 
+    let inner = MessageWithId {
+        trigger_id: trigger_id_for(event_id_seed),
+        message: Bytes::from_slice(env, &[event_id_seed; 8]),
+    };
+
     let envelope = XlmEnvelope {
         event_id: BytesN::from_array(env, &event_id),
         ordering: BytesN::from_array(env, &[0u8; 12]),
-        payload: Bytes::from_slice(env, &[event_id_seed; 8]),
+        payload: inner.to_xdr(env),
     };
 
     let xdr_bytes = envelope.to_xdr(env);
