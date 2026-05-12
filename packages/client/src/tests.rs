@@ -13,10 +13,13 @@ use wasi_soroban_rs::xdr::{Limits as ClientLimits, ScVal as ClientScVal, WriteXd
 use soroban_sdk::xdr::{Limits as SdkLimits, ReadXdr, ScVal as SdkScVal};
 use soroban_sdk::{Address, Bytes, BytesN, Env, String as SdkString, TryFromVal, TryIntoVal, Val};
 
-use warpdrive_shared::interfaces::handler::{Ed25519SignatureData, SignatureData, XlmEnvelope};
+use warpdrive_shared::interfaces::handler::{
+    Ed25519SignatureData, MessageWithId as SharedMessageWithId, SignatureData, XlmEnvelope,
+};
 use warpdrive_shared::interfaces::project_root::VerificationType as SharedVerificationType;
 
 use crate::ethereum_handler::SignatureData as ClientSigData;
+use crate::message_with_id::MessageWithId as ClientMessageWithId;
 use crate::project_root::VerificationType as ClientVerificationType;
 use crate::scval::IntoScValExt;
 use crate::stellar_handler::Ed25519SignatureData as ClientEd25519SigData;
@@ -333,4 +336,56 @@ fn verification_type_stellar_decodes_to_client_enum() {
         client_verification_type(from_sdk(&sdk_scval)),
         ClientVerificationType::Stellar,
     );
+}
+
+// ── MessageWithId: shape parity between client and shared ───────────────
+
+#[test]
+fn message_with_id_client_to_shared_roundtrip() {
+    // Client-encoded XDR bytes must decode into the shared `MessageWithId`
+    // contracttype with the same field values.
+    let env = Env::default();
+    let client = ClientMessageWithId {
+        trigger_id: 0xCAFEBABEDEADBEEF,
+        message: vec![0xAA, 0xBB, 0xCC, 0xDD, 0xEE],
+    };
+    let xdr_bytes = client.to_xdr_bytes().expect("client encode");
+
+    use soroban_sdk::xdr::FromXdr;
+    let bytes = Bytes::from_slice(&env, &xdr_bytes);
+    let parsed = SharedMessageWithId::from_xdr(&env, &bytes).expect("shared decode");
+
+    assert_eq!(parsed.trigger_id, client.trigger_id);
+    let msg_bytes: std::vec::Vec<u8> = parsed.message.iter().collect();
+    assert_eq!(msg_bytes, client.message);
+}
+
+#[test]
+fn message_with_id_shared_to_client_roundtrip() {
+    // Shared-encoded XDR bytes must decode into the client `MessageWithId`
+    // mirror with the same field values.
+    let env = Env::default();
+    let trigger_id: u64 = 9_007_199_254_740_993;
+    let message: std::vec::Vec<u8> = vec![0x01, 0x02, 0x03, 0xFF];
+    let shared = SharedMessageWithId {
+        trigger_id,
+        message: Bytes::from_slice(&env, &message),
+    };
+
+    use soroban_sdk::xdr::ToXdr;
+    let xdr_bytes: std::vec::Vec<u8> = shared.to_xdr(&env).iter().collect();
+
+    let parsed = ClientMessageWithId::from_xdr_bytes(&xdr_bytes).expect("client decode");
+    assert_eq!(parsed.trigger_id, trigger_id);
+    assert_eq!(parsed.message, message);
+}
+
+#[test]
+fn message_with_id_client_decode_rejects_non_map() {
+    use wasi_soroban_rs::xdr::WriteXdr;
+
+    let bytes = wasi_soroban_rs::xdr::ScVal::U64(42)
+        .to_xdr(wasi_soroban_rs::xdr::Limits::none())
+        .unwrap();
+    assert!(ClientMessageWithId::from_xdr_bytes(&bytes).is_err());
 }
