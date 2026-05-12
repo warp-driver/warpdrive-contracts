@@ -1,5 +1,8 @@
+pub mod ed25519_security;
+pub mod ed25519_verification;
 pub mod ethereum_handler;
 pub mod loader;
+pub mod message_with_id;
 pub mod project_root;
 pub mod scval;
 pub mod secp256k1_security;

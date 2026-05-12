@@ -1,53 +1,54 @@
-// This file tests compatibility with WAVS, using code from github.com/Lay3rLabs/WAVS to generate a test vector.
-// In particular, this is slightly adapted from the test case at  packages/utils/src/evm_client/signing.rs:196-259
+// External-vector compatibility tests. Vectors are produced by
+// `cargo run -p test-vectors` (see tools/test-vectors). Regenerate from there
+// if the on-wire format (Envelope or DataWithId) changes.
+//
+// The envelope embeds a DataWithId-wrapped payload (triggerId = 1001,
+// data = [0x01; 8]). Signatures are EIP-191 over keccak256(envelope_bytes).
 
+use crate::envelope::DataWithId;
 use crate::{EthereumHandler, EthereumHandlerClient, HandlerError, SignatureData};
+use alloy_sol_types::SolValue;
 use hex_literal::hex;
 use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
 use warpdrive_secp256k1_verification::Secp256k1Verification;
 
-/*
-From `cargo test evm_client::signing::test::envelope_test_vector` in wavs/packages/utils:
-
-Envelope: 000000000000000000000000000000000000000000000000000000000000002001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000030102030000000000000000000000000000000000000000000000000000000000
-Signature: 96A68226A31FDF9D1339D27E705A9A231A580F14736C005714A674425649BA371D00172C79D29B6E0C79F13F408023E808A12431469D5FD13CC417AEB90425AF1C
-PubKey: 0232298EDEBA83F60F31CAB61995A240D88E5C7604B9F70D09EEE95331CB444599
-Event ID: 0101010101010101010101010101010101010101
-Ordering: 000000000000000000000000
-Payload: 010203
-*/
-
-// Different runs with random private keys
 mod ex1 {
     use super::hex;
-    pub const SIGNATURE: [u8; 65] = hex!(
-        "96A68226A31FDF9D1339D27E705A9A231A580F14736C005714A674425649BA371D00172C79D29B6E0C79F13F408023E808A12431469D5FD13CC417AEB90425AF1C"
-    );
     pub const PUB_KEY: [u8; 33] =
-        hex!("0232298EDEBA83F60F31CAB61995A240D88E5C7604B9F70D09EEE95331CB444599");
+        hex!("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
+    pub const SIGNATURE: [u8; 65] = hex!(
+        "4634d3a3884bd61b098b84f871530aadda0396f8b28a97bc44c30d102802f02a1fca785b5392a53b0b5e81de22e734c0b2756b44c3ff7a72c748b46014d1c20c1b"
+    );
 }
 
 mod ex2 {
     use super::hex;
-    pub const SIGNATURE: [u8; 65] = hex!(
-        "F723DCDDAD3B48D93BEA69179F6114A3C8E0FA97218948094CFA7C69F5D7DB781C219129D3149102C4348FD0799EC721AEEAC73459FDEE2A0EC695A8C4B320311B"
-    );
     pub const PUB_KEY: [u8; 33] =
-        hex!("03ADA8BB4E3F7CF5AB52BBEEF53BA9BAD2E7EB7B49FA7D37E5E3ACF226B1211D60");
+        hex!("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5");
+    pub const SIGNATURE: [u8; 65] = hex!(
+        "ad91e75bd83950a7ad0637a3aa4d0dd7a2a2a5cb09981df0cb0473d4fc4ca35d1896a523f759aa83f6351f2a334a3d044dbc81e41d5aadb34bd93974933b41cd1b"
+    );
 }
 
-// Same for all test cases
-pub const ENVELOPE: [u8; 192] = hex!(
-    "000000000000000000000000000000000000000000000000000000000000002001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000030102030000000000000000000000000000000000000000000000000000000000"
+pub const ENVELOPE: [u8; 320] = hex!(
+    "000000000000000000000000000000000000000000000000000000000000002001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000003e9000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000080101010101010101000000000000000000000000000000000000000000000000"
 );
-const EVENT_ID: [u8; 20] = hex!("0101010101010101010101010101010101010101");
-// const ORDERING: [u8; 12] = hex!("000000000000000000000000");
-const PAYLOAD: [u8; 3] = hex!("010203");
+const EVENT_ID: [u8; 20] = hex!("0100000000000000000000000000000000000000");
+const TRIGGER_ID: u64 = 1001;
+const DATA: [u8; 8] = [0x01; 8];
 
 const TEST_REF_BLOCK: u32 = 10;
 
 type PubKey = BytesN<33>;
+
+fn expected_payload(env: &Env) -> Bytes {
+    let inner = DataWithId {
+        triggerId: TRIGGER_ID,
+        data: DATA.to_vec().into(),
+    };
+    Bytes::from_slice(env, &inner.abi_encode())
+}
 
 fn setup_handler_with_signer<'a>(env: &'a Env, pubkey: &[u8; 33]) -> EthereumHandlerClient<'a> {
     let admin = soroban_sdk::Address::generate(env);
@@ -89,8 +90,7 @@ fn test_verify_success_ex1() {
     assert_eq!(result, Ok(Ok(())));
 
     let event_id = BytesN::from_array(&env, &EVENT_ID);
-    let payload = Bytes::from_array(&env, &PAYLOAD);
-    assert_eq!(client.payload(&event_id), Some(payload));
+    assert_eq!(client.payload(&event_id), Some(expected_payload(&env)));
 }
 
 #[test]
@@ -114,8 +114,7 @@ fn test_verify_success_ex2() {
     assert_eq!(result, Ok(Ok(())));
 
     let event_id = BytesN::from_array(&env, &EVENT_ID);
-    let payload = Bytes::from_array(&env, &PAYLOAD);
-    assert_eq!(client.payload(&event_id), Some(payload));
+    assert_eq!(client.payload(&event_id), Some(expected_payload(&env)));
 }
 
 #[test]

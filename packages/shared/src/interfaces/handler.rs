@@ -72,6 +72,15 @@ pub struct XlmEnvelope {
     pub payload: Bytes,
 }
 
+/// Inner payload carried inside an `XlmEnvelope.payload`. Mirrors the
+/// CosmWasm `MessageWithId` so the same logical struct is exchanged across
+/// chains, but uses Soroban's native XDR encoding here.
+#[contracttype]
+pub struct MessageWithId {
+    pub trigger_id: u64,
+    pub message: Bytes,
+}
+
 // ── Events ───────────────────────────────────────────────────────────
 
 #[contractevent]
@@ -83,6 +92,22 @@ pub struct Verified {
 impl Verified {
     pub fn new(event_id: BytesN<20>) -> Self {
         Self { event_id }
+    }
+}
+
+#[contractevent]
+pub struct Triggered {
+    #[topic]
+    pub trigger_id: u64,
+    pub event_id: BytesN<20>,
+}
+
+impl Triggered {
+    pub fn new(trigger_id: u64, event_id: BytesN<20>) -> Self {
+        Self {
+            trigger_id,
+            event_id,
+        }
     }
 }
 

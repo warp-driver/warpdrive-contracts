@@ -1,11 +1,14 @@
 extern crate alloc;
 extern crate std;
 
-use crate::envelope::Envelope;
+use crate::envelope::{DataWithId, Envelope};
 use crate::{EthereumHandler, EthereumHandlerClient, HandlerError, SignatureData};
 use alloy_primitives::FixedBytes;
 use alloy_sol_types::SolValue;
-use soroban_sdk::{Bytes, BytesN, Env, Vec, testutils::Address as _, testutils::Ledger as _};
+use soroban_sdk::{
+    Bytes, BytesN, Env, IntoVal, Map, Symbol, Val, Vec, testutils::Address as _,
+    testutils::Events as _, testutils::Ledger as _, vec,
+};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
 use warpdrive_secp256k1_verification::Secp256k1Verification;
 use warpdrive_shared::testutils::{
@@ -18,14 +21,23 @@ pub(super) const TEST_REF_BLOCK: u32 = 10;
 /// Current ledger sequence in tests — must be > TEST_REF_BLOCK.
 pub(super) const TEST_CURRENT_LEDGER: u32 = 100;
 
+pub(super) fn expected_trigger_id(seed: u8) -> u64 {
+    seed as u64 + 1000
+}
+
 pub(super) fn make_envelope_bytes_eth(env: &Env, event_id_seed: u8) -> Bytes {
     let mut event_id = [0u8; 20];
     event_id[0] = event_id_seed;
 
+    let inner = DataWithId {
+        triggerId: expected_trigger_id(event_id_seed),
+        data: alloc::vec![event_id_seed; 8].into(),
+    };
+
     let envelope = Envelope {
         eventId: FixedBytes(event_id),
         ordering: FixedBytes([0u8; 12]),
-        payload: alloc::vec![event_id_seed; 8].into(),
+        payload: inner.abi_encode().into(),
     };
 
     let encoded = envelope.abi_encode();
@@ -39,7 +51,11 @@ fn expected_event_id(env: &Env, seed: u8) -> BytesN<20> {
 }
 
 fn expected_payload(env: &Env, seed: u8) -> Bytes {
-    Bytes::from_slice(env, &[seed; 8])
+    let inner = DataWithId {
+        triggerId: expected_trigger_id(seed),
+        data: alloc::vec![seed; 8].into(),
+    };
+    Bytes::from_slice(env, &inner.abi_encode())
 }
 
 /// Returns (handler_client, key1, pubkey1, key2, pubkey2) with key1 and key2
@@ -140,6 +156,46 @@ fn test_verify_success_combined_weight() {
     assert_eq!(
         client.payload(&expected_event_id(&env, 1)),
         Some(expected_payload(&env, 1))
+    );
+}
+
+// ── Events ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_verify_publishes_event_id_and_trigger_id_events() {
+    let env = Env::default();
+    let (client, _key1, _pk1, key2, pk2) = setup_handler_with_signers(&env);
+
+    let envelope = make_envelope_bytes_eth(&env, 7);
+    let sig_data = make_sig_data(&env, &envelope.to_alloc_vec(), &[(key2, pk2)]);
+
+    assert_eq!(client.try_verify_eth(&envelope, &sig_data), Ok(Ok(())));
+
+    let event_id = expected_event_id(&env, 7);
+    let trigger_id = expected_trigger_id(7);
+    let handler_addr = client.address.clone();
+
+    let verified_topics: Vec<Val> =
+        (Symbol::new(&env, "verified"), event_id.clone()).into_val(&env);
+    let verified_data: Val = Map::<Symbol, Val>::new(&env).into_val(&env);
+    let triggered_topics: Vec<Val> = (Symbol::new(&env, "triggered"), trigger_id).into_val(&env);
+    let triggered_data: Val = Map::<Symbol, Val>::from_array(
+        &env,
+        [(
+            Symbol::new(&env, "event_id"),
+            event_id.clone().into_val(&env),
+        )],
+    )
+    .into_val(&env);
+
+    let from_handler = env.events().all().filter_by_contract(&handler_addr);
+    assert_eq!(
+        from_handler,
+        vec![
+            &env,
+            (handler_addr.clone(), verified_topics, verified_data),
+            (handler_addr, triggered_topics, triggered_data),
+        ],
     );
 }
 

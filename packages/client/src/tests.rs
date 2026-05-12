@@ -9,14 +9,23 @@
 //! the on-wire contract ABI is mismatched and the client will fail at
 //! simulation time.
 
-use wasi_soroban_rs::xdr::{Limits as ClientLimits, ScVal as ClientScVal, WriteXdr};
 use soroban_sdk::xdr::{Limits as SdkLimits, ReadXdr, ScVal as SdkScVal};
 use soroban_sdk::{Address, Bytes, BytesN, Env, String as SdkString, TryFromVal, TryIntoVal, Val};
+use wasi_soroban_rs::xdr::{Limits as ClientLimits, ScVal as ClientScVal, WriteXdr};
 
-use warpdrive_shared::interfaces::handler::{Ed25519SignatureData, SignatureData, XlmEnvelope};
+use warpdrive_shared::interfaces::handler::{
+    Ed25519SignatureData, MessageWithId as SharedMessageWithId, SignatureData, XlmEnvelope,
+};
 use warpdrive_shared::interfaces::project_root::VerificationType as SharedVerificationType;
+use warpdrive_shared::interfaces::security::{
+    Ed25519SignerInfo as SharedEd25519SignerInfo, SignerInfo as SharedSignerInfo,
+};
 
+use crate::ed25519_security::{
+    Ed25519SignerInfo as ClientEd25519SignerInfo, decode_signer_info as decode_ed25519_signer_info,
+};
 use crate::ethereum_handler::SignatureData as ClientSigData;
+use crate::message_with_id::MessageWithId as ClientMessageWithId;
 use crate::project_root::VerificationType as ClientVerificationType;
 use crate::scval::IntoScValExt;
 use crate::stellar_handler::Ed25519SignatureData as ClientEd25519SigData;
@@ -333,4 +342,121 @@ fn verification_type_stellar_decodes_to_client_enum() {
         client_verification_type(from_sdk(&sdk_scval)),
         ClientVerificationType::Stellar,
     );
+}
+
+// ── MessageWithId: shape parity between client and shared ───────────────
+
+#[test]
+fn message_with_id_client_to_shared_roundtrip() {
+    // Client-encoded XDR bytes must decode into the shared `MessageWithId`
+    // contracttype with the same field values.
+    let env = Env::default();
+    let client = ClientMessageWithId {
+        trigger_id: 0xCAFEBABEDEADBEEF,
+        message: vec![0xAA, 0xBB, 0xCC, 0xDD, 0xEE],
+    };
+    let xdr_bytes = client.to_xdr_bytes().expect("client encode");
+
+    use soroban_sdk::xdr::FromXdr;
+    let bytes = Bytes::from_slice(&env, &xdr_bytes);
+    let parsed = SharedMessageWithId::from_xdr(&env, &bytes).expect("shared decode");
+
+    assert_eq!(parsed.trigger_id, client.trigger_id);
+    let msg_bytes: std::vec::Vec<u8> = parsed.message.iter().collect();
+    assert_eq!(msg_bytes, client.message);
+}
+
+#[test]
+fn message_with_id_shared_to_client_roundtrip() {
+    // Shared-encoded XDR bytes must decode into the client `MessageWithId`
+    // mirror with the same field values.
+    let env = Env::default();
+    let trigger_id: u64 = 9_007_199_254_740_993;
+    let message: std::vec::Vec<u8> = vec![0x01, 0x02, 0x03, 0xFF];
+    let shared = SharedMessageWithId {
+        trigger_id,
+        message: Bytes::from_slice(&env, &message),
+    };
+
+    use soroban_sdk::xdr::ToXdr;
+    let xdr_bytes: std::vec::Vec<u8> = shared.to_xdr(&env).iter().collect();
+
+    let parsed = ClientMessageWithId::from_xdr_bytes(&xdr_bytes).expect("client decode");
+    assert_eq!(parsed.trigger_id, trigger_id);
+    assert_eq!(parsed.message, message);
+}
+
+#[test]
+fn message_with_id_client_decode_rejects_non_map() {
+    use wasi_soroban_rs::xdr::WriteXdr;
+
+    let bytes = wasi_soroban_rs::xdr::ScVal::U64(42)
+        .to_xdr(wasi_soroban_rs::xdr::Limits::none())
+        .unwrap();
+    assert!(ClientMessageWithId::from_xdr_bytes(&bytes).is_err());
+}
+
+// ── Ed25519: client args + return-value shapes ──────────────────────────
+
+#[test]
+fn ed25519_signer_pubkey_decodes_as_bytesn_32() {
+    // 32-byte pubkey args travel through `into_val_ext()` (the secp variant uses
+    // the same extension trait for [u8; 33]); make sure the 32-byte path lands
+    // as a soroban-sdk `BytesN<32>` on the contract side.
+    let env = Env::default();
+    let client: [u8; 32] = [5u8; 32];
+    let sdk_scval = to_sdk(client.into_val_ext().unwrap());
+
+    let parsed: BytesN<32> = try_from_scval(&env, &sdk_scval);
+    assert_eq!(parsed.to_array(), client);
+}
+
+#[test]
+fn ed25519_signature_bytes_decode_as_bytesn_64() {
+    let env = Env::default();
+    let client: [u8; 64] = [6u8; 64];
+    let sdk_scval = to_sdk(client.into_val_ext().unwrap());
+
+    let parsed: BytesN<64> = try_from_scval(&env, &sdk_scval);
+    assert_eq!(parsed.to_array(), client);
+}
+
+#[test]
+fn ed25519_signer_info_decodes_into_client_struct() {
+    // Mirrors the contract->client direction for `list_signers`. The handler
+    // returns `Ed25519SignerInfo { key: BytesN<32>, weight: u64 }`; the client
+    // must decode that map shape.
+    let env = Env::default();
+    let key_bytes = [0xABu8; 32];
+    let weight: u64 = 12_345;
+    let shared = SharedEd25519SignerInfo {
+        key: BytesN::from_array(&env, &key_bytes),
+        weight,
+    };
+    let sdk_scval = to_sdk_scval(&env, shared);
+
+    let client_scval = from_sdk(&sdk_scval);
+    let parsed = decode_ed25519_signer_info(&client_scval).expect("decode");
+    assert_eq!(
+        parsed,
+        ClientEd25519SignerInfo {
+            key: key_bytes,
+            weight,
+        },
+    );
+}
+
+#[test]
+fn ed25519_signer_info_decode_rejects_wrong_key_size() {
+    // Guard against accidentally reusing the secp 33-byte decoder for ed25519
+    // (or vice versa): a `SignerInfo` with a 33-byte key must not decode as
+    // `Ed25519SignerInfo`.
+    let env = Env::default();
+    let shared = SharedSignerInfo {
+        key: BytesN::from_array(&env, &[0u8; 33]),
+        weight: 1,
+    };
+    let sdk_scval = to_sdk_scval(&env, shared);
+    let client_scval = from_sdk(&sdk_scval);
+    assert!(decode_ed25519_signer_info(&client_scval).is_err());
 }

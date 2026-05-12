@@ -1,7 +1,7 @@
-use wasi_soroban_rs::ContractId;
 use std::fmt;
 use std::fs;
 use std::path::Path;
+use wasi_soroban_rs::ContractId;
 
 pub const TESTNET_DIR: &str = "../../.testnet";
 
