@@ -10,6 +10,7 @@ pub mod secp256k1_verification;
 pub mod stellar_handler;
 pub mod utils;
 pub mod warpdrive;
+pub mod xlm_envelope;
 
 #[cfg(test)]
 mod tests;

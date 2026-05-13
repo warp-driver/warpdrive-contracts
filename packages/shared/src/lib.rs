@@ -1,5 +1,7 @@
 #![no_std]
 
+extern crate alloc;
+
 pub mod admin;
 pub mod checkpoint;
 pub mod interfaces;

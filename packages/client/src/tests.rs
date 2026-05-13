@@ -29,6 +29,7 @@ use crate::message_with_id::MessageWithId as ClientMessageWithId;
 use crate::project_root::VerificationType as ClientVerificationType;
 use crate::scval::IntoScValExt;
 use crate::stellar_handler::Ed25519SignatureData as ClientEd25519SigData;
+use crate::xlm_envelope::XlmEnvelope as ClientXlmEnvelope;
 
 // ── XDR bridge ──────────────────────────────────────────────────────────
 
@@ -198,6 +199,23 @@ fn xlm_envelope_bytes_roundtrip_through_xdr() {
     assert_eq!(parsed.event_id, event_id);
     assert_eq!(parsed.ordering, ordering);
     assert_eq!(parsed.payload, payload);
+}
+
+#[test]
+fn xlm_envelope_new_encode_decode_roundtrip_no_env() {
+    // Round-trip through the convenience methods with `env: None` — exercises
+    // both the plain-bytes API and the implicit `Env::default()` fallback.
+    let payload = std::vec![0xaa, 0xbb, 0xcc];
+    let event_id = [11u8; 20];
+    let ordering = [12u8; 12];
+
+    let bytes = XlmEnvelope::new(None, payload.clone(), event_id, ordering).encode(None);
+    let parsed = XlmEnvelope::decode(None, &bytes).expect("decode envelope");
+
+    assert_eq!(parsed.event_id.to_array(), event_id);
+    assert_eq!(parsed.ordering.to_array(), ordering);
+    let payload_out: std::vec::Vec<u8> = parsed.payload.iter().collect();
+    assert_eq!(payload_out, payload);
 }
 
 // ── Return values: contract → client ────────────────────────────────────
@@ -384,6 +402,61 @@ fn message_with_id_shared_to_client_roundtrip() {
     let parsed = ClientMessageWithId::from_xdr_bytes(&xdr_bytes).expect("client decode");
     assert_eq!(parsed.trigger_id, trigger_id);
     assert_eq!(parsed.message, message);
+}
+
+#[test]
+fn xlm_envelope_client_to_shared_roundtrip() {
+    // Client-encoded XDR bytes must decode into the shared `XlmEnvelope`
+    // contracttype with the same field values.
+    let env = Env::default();
+    let client = ClientXlmEnvelope::new(
+        vec![0xAA, 0xBB, 0xCC, 0xDD, 0xEE],
+        [0x11; 20],
+        [0x22; 12],
+    );
+    let xdr_bytes = client.encode().expect("client encode");
+
+    use soroban_sdk::xdr::FromXdr;
+    let bytes = Bytes::from_slice(&env, &xdr_bytes);
+    let parsed = XlmEnvelope::decode(&env, &bytes).expect("shared decode");
+
+    assert_eq!(parsed.event_id.to_array(), client.event_id);
+    assert_eq!(parsed.ordering.to_array(), client.ordering);
+    let payload_bytes: std::vec::Vec<u8> = parsed.payload.iter().collect();
+    assert_eq!(payload_bytes, client.payload);
+}
+
+#[test]
+fn xlm_envelope_shared_to_client_roundtrip() {
+    // Shared-encoded XDR bytes must decode into the client `XlmEnvelope`
+    // mirror with the same field values.
+    let env = Env::default();
+    let event_id = [0x33u8; 20];
+    let ordering = [0x44u8; 12];
+    let payload: std::vec::Vec<u8> = vec![0x01, 0x02, 0x03, 0xFF];
+    let shared = XlmEnvelope {
+        event_id: BytesN::from_array(&env, &event_id),
+        ordering: BytesN::from_array(&env, &ordering),
+        payload: Bytes::from_slice(&env, &payload),
+    };
+
+    use soroban_sdk::xdr::ToXdr;
+    let xdr_bytes: std::vec::Vec<u8> = shared.to_xdr(&env).iter().collect();
+
+    let parsed = ClientXlmEnvelope::from_xdr_bytes(&xdr_bytes).expect("client decode");
+    assert_eq!(parsed.event_id, event_id);
+    assert_eq!(parsed.ordering, ordering);
+    assert_eq!(parsed.payload, payload);
+}
+
+#[test]
+fn xlm_envelope_client_decode_rejects_non_map() {
+    use wasi_soroban_rs::xdr::WriteXdr;
+
+    let bytes = wasi_soroban_rs::xdr::ScVal::U64(42)
+        .to_xdr(wasi_soroban_rs::xdr::Limits::none())
+        .unwrap();
+    assert!(ClientXlmEnvelope::from_xdr_bytes(&bytes).is_err());
 }
 
 #[test]
