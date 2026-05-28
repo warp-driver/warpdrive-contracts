@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use wasi_soroban_rs::xdr::{
     ContractId as XdrContractId, Hash, ScAddress, ScString, ScVal, ScVec, VecM,
 };
@@ -5,9 +7,13 @@ use wasi_soroban_rs::{
     ClientContractConfigs, ContractId, IntoScVal, SorobanHelperError, SorobanTransactionResponse,
 };
 
-use crate::scval::symbol;
+use crate::scval::{IntoScValExt, symbol};
 use crate::utils::{execute, query, unexpected};
 use crate::warpdrive::WarpdriveClient;
+
+fn contract_address(id: ContractId) -> ScVal {
+    ScVal::Address(ScAddress::Contract(XdrContractId(Hash(id.0))))
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum VerificationType {
@@ -57,13 +63,108 @@ impl ProjectRootClient {
         args: Vec<ScVal>,
     ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
         let forward_args = vec![
-            ScVal::Address(ScAddress::Contract(XdrContractId(Hash(target.0)))),
+            contract_address(target),
             symbol(function)?,
             ScVal::Vec(Some(ScVec(VecM::try_from(args).map_err(|_| {
                 SorobanHelperError::XdrEncodingFailed("forward args too long".to_string())
             })?))),
         ];
         execute(&mut self.client_configs, "forward", forward_args).await
+    }
+
+    // ── Typed helpers: registered security_contract ────────────────────
+
+    /// Forward `add_signer(key, weight)` to the registered security contract,
+    /// secp256k1 (33-byte key) variant.
+    pub async fn add_secp256k1_signer(
+        &mut self,
+        key: [u8; 33],
+        weight: u64,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![key.into_val_ext()?, ScVal::U64(weight)];
+        execute(&mut self.client_configs, "add_secp256k1_signer", args).await
+    }
+
+    /// Forward `remove_signer(key)` to the registered security contract,
+    /// secp256k1 (33-byte key) variant.
+    pub async fn remove_secp256k1_signer(
+        &mut self,
+        key: [u8; 33],
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![key.into_val_ext()?];
+        execute(&mut self.client_configs, "remove_secp256k1_signer", args).await
+    }
+
+    /// Forward `add_signer(key, weight)` to the registered security contract,
+    /// ed25519 (32-byte key) variant.
+    pub async fn add_ed25519_signer(
+        &mut self,
+        key: [u8; 32],
+        weight: u64,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![key.into_val_ext()?, ScVal::U64(weight)];
+        execute(&mut self.client_configs, "add_ed25519_signer", args).await
+    }
+
+    /// Forward `remove_signer(key)` to the registered security contract,
+    /// ed25519 (32-byte key) variant.
+    pub async fn remove_ed25519_signer(
+        &mut self,
+        key: [u8; 32],
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![key.into_val_ext()?];
+        execute(&mut self.client_configs, "remove_ed25519_signer", args).await
+    }
+
+    /// Forward `set_threshold(numerator, denominator)` to the registered
+    /// security contract. Same signature for both schemes.
+    pub async fn set_threshold(
+        &mut self,
+        numerator: u64,
+        denominator: u64,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![ScVal::U64(numerator), ScVal::U64(denominator)];
+        execute(&mut self.client_configs, "set_threshold", args).await
+    }
+
+    // ── Typed WarpDriveInterface forwarders (any target) ───────────────
+
+    /// Forward `upgrade(new_wasm_hash, new_version)` to `target`. ProjectRoot
+    /// must currently be `target`'s admin.
+    pub async fn upgrade_contract(
+        &mut self,
+        target: ContractId,
+        new_wasm_hash: [u8; 32],
+        new_version: String,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![
+            contract_address(target),
+            new_wasm_hash.into_val(),
+            new_version.into_val(),
+        ];
+        execute(&mut self.client_configs, "upgrade_contract", args).await
+    }
+
+    /// Forward `propose_admin(new_admin)` to `target`. Use this to start
+    /// rotating the admin of a downstream contract away from ProjectRoot.
+    pub async fn propose_contract_admin(
+        &mut self,
+        target: ContractId,
+        new_admin: &str,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let new_admin = ScAddress::from_str(new_admin)?;
+        let args = vec![contract_address(target), ScVal::Address(new_admin)];
+        execute(&mut self.client_configs, "propose_contract_admin", args).await
+    }
+
+    /// Forward `accept_admin()` to `target`. ProjectRoot must currently be
+    /// `target`'s pending admin.
+    pub async fn accept_contract_admin(
+        &mut self,
+        target: ContractId,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![contract_address(target)];
+        execute(&mut self.client_configs, "accept_contract_admin", args).await
     }
 
     pub async fn security_contract(&self) -> Result<ContractId, SorobanHelperError> {

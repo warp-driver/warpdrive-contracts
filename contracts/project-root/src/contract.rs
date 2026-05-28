@@ -1,7 +1,10 @@
-use soroban_sdk::{Address, BytesN, Env, String, Symbol, Val, Vec, contract, contractimpl};
+use soroban_sdk::{
+    Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec, contract, contractimpl, vec,
+};
 
 use warpdrive_shared::interfaces::{
     project_root::{Forwarded, ProjectRootInterface, UpdatedSpecRepo},
+    security::SecurityError,
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
@@ -27,6 +30,18 @@ impl ProjectRoot {
         storage::set_project_spec_repo(&env, &project_spec_repo);
         storage::set_verification_type(&env, &verification_type);
         storage::extend_instance_ttl(&env);
+    }
+}
+
+impl ProjectRoot {
+    /// Shared core for every forward path: admin gate, TTL, audit event, and
+    /// the cross-contract call. `forward` and the typed helpers all funnel
+    /// through here so the auth check and event are written once.
+    fn proxy(env: &Env, target: &Address, function: Symbol, args: Vec<Val>) -> Val {
+        storage::get_admin(env).require_auth();
+        storage::extend_instance_ttl(env);
+        Forwarded::new(target.clone(), function.clone()).publish(env);
+        env.invoke_contract::<Val>(target, &function, args)
     }
 }
 
@@ -89,9 +104,66 @@ impl ProjectRootInterface for ProjectRoot {
     }
 
     fn forward(env: Env, target: Address, function: Symbol, args: Vec<Val>) -> Val {
-        storage::get_admin(&env).require_auth();
-        storage::extend_instance_ttl(&env);
-        Forwarded::new(target.clone(), function.clone()).publish(&env);
-        env.invoke_contract::<Val>(&target, &function, args)
+        Self::proxy(&env, &target, function, args)
+    }
+
+    // ── Typed helpers: registered security_contract ────────────────────
+
+    fn add_secp256k1_signer(env: Env, key: BytesN<33>, weight: u64) -> Result<(), SecurityError> {
+        let target = storage::get_security_contract(&env);
+        let function = Symbol::new(&env, "add_signer");
+        let args = vec![&env, key.to_val(), weight.into_val(&env)];
+        Self::proxy(&env, &target, function, args);
+        Ok(())
+    }
+
+    fn remove_secp256k1_signer(env: Env, key: BytesN<33>) {
+        let target = storage::get_security_contract(&env);
+        let function = Symbol::new(&env, "remove_signer");
+        let args = vec![&env, key.to_val()];
+        Self::proxy(&env, &target, function, args);
+    }
+
+    fn add_ed25519_signer(env: Env, key: BytesN<32>, weight: u64) -> Result<(), SecurityError> {
+        let target = storage::get_security_contract(&env);
+        let function = Symbol::new(&env, "add_signer");
+        let args = vec![&env, key.to_val(), weight.into_val(&env)];
+        Self::proxy(&env, &target, function, args);
+        Ok(())
+    }
+
+    fn remove_ed25519_signer(env: Env, key: BytesN<32>) {
+        let target = storage::get_security_contract(&env);
+        let function = Symbol::new(&env, "remove_signer");
+        let args = vec![&env, key.to_val()];
+        Self::proxy(&env, &target, function, args);
+    }
+
+    fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError> {
+        let target = storage::get_security_contract(&env);
+        let function = Symbol::new(&env, "set_threshold");
+        let args = vec![&env, numerator.into_val(&env), denominator.into_val(&env)];
+        Self::proxy(&env, &target, function, args);
+        Ok(())
+    }
+
+    // ── Typed helpers: WarpDriveInterface on any target ────────────────
+
+    fn upgrade_contract(env: Env, target: Address, new_wasm_hash: BytesN<32>, new_version: String) {
+        let function = Symbol::new(&env, "upgrade");
+        let args = vec![&env, new_wasm_hash.to_val(), new_version.to_val()];
+        Self::proxy(&env, &target, function, args);
+    }
+
+    fn propose_contract_admin(env: Env, target: Address, new_admin: Address) {
+        let function = Symbol::new(&env, "propose_admin");
+        let args = vec![&env, new_admin.to_val()];
+        Self::proxy(&env, &target, function, args);
+    }
+
+    fn accept_contract_admin(env: Env, target: Address) {
+        let function = Symbol::new(&env, "accept_admin");
+        let args = vec![&env];
+        Self::proxy(&env, &target, function, args);
     }
 }
