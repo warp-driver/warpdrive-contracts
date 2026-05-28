@@ -53,6 +53,7 @@ tasks:
     deps: [build]
     cmds:
       - cargo test --lib
+      - cd packages/client && cargo test
 
   doc-test:
     desc: Run documentation tests

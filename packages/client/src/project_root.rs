@@ -1,8 +1,11 @@
-use wasi_soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress, ScString, ScVal};
+use wasi_soroban_rs::xdr::{
+    ContractId as XdrContractId, Hash, ScAddress, ScString, ScVal, ScVec, VecM,
+};
 use wasi_soroban_rs::{
     ClientContractConfigs, ContractId, IntoScVal, SorobanHelperError, SorobanTransactionResponse,
 };
 
+use crate::scval::symbol;
 use crate::utils::{execute, query, unexpected};
 use crate::warpdrive::WarpdriveClient;
 
@@ -41,6 +44,26 @@ impl ProjectRootClient {
             vec![repo.into_val()],
         )
         .await
+    }
+
+    /// Admin-gated proxy: invoke `function` on `target` with `args`. The caller
+    /// is responsible for encoding `args` to match `target`'s ABI for
+    /// `function`. Returns the submitted-transaction response; the inner
+    /// call's return value is in the response's XDR result.
+    pub async fn forward(
+        &mut self,
+        target: ContractId,
+        function: &str,
+        args: Vec<ScVal>,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let forward_args = vec![
+            ScVal::Address(ScAddress::Contract(XdrContractId(Hash(target.0)))),
+            symbol(function)?,
+            ScVal::Vec(Some(ScVec(VecM::try_from(args).map_err(|_| {
+                SorobanHelperError::XdrEncodingFailed("forward args too long".to_string())
+            })?))),
+        ];
+        execute(&mut self.client_configs, "forward", forward_args).await
     }
 
     pub async fn security_contract(&self) -> Result<ContractId, SorobanHelperError> {

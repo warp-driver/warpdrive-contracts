@@ -416,9 +416,7 @@ fn xlm_envelope_client_to_shared_roundtrip() {
     );
     let xdr_bytes = client.encode().expect("client encode");
 
-    use soroban_sdk::xdr::FromXdr;
-    let bytes = Bytes::from_slice(&env, &xdr_bytes);
-    let parsed = XlmEnvelope::decode(&env, &bytes).expect("shared decode");
+    let parsed = XlmEnvelope::decode(Some(&env), &xdr_bytes).expect("shared decode");
 
     assert_eq!(parsed.event_id.to_array(), client.event_id);
     assert_eq!(parsed.ordering.to_array(), client.ordering);

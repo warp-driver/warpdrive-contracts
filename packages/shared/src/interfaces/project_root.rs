@@ -1,4 +1,6 @@
-use soroban_sdk::{Address, Env, String, contractclient, contractevent, contracttype};
+use soroban_sdk::{
+    Address, Env, String, Symbol, Val, Vec, contractclient, contractevent, contracttype,
+};
 
 use super::warpdrive::WarpDriveInterface;
 
@@ -40,12 +42,31 @@ impl UpdatedSpecRepo {
     }
 }
 
+#[contractevent]
+pub struct Forwarded {
+    pub target: Address,
+    pub function: Symbol,
+}
+
+impl Forwarded {
+    pub fn new(target: Address, function: Symbol) -> Self {
+        Self { target, function }
+    }
+}
+
 // ── Interface trait (compile-time contract conformance) ──────────────
 
 #[contractclient(name = "ProjectRootClient")]
 pub trait ProjectRootInterface: WarpDriveInterface {
     // State Changing Operations
     fn update_project_spec_repo(env: Env, repo: String);
+
+    /// Admin-gated proxy: invoke `function` on `target` with `args`, returning
+    /// the inner call's return value. Errors from the inner call propagate.
+    ///
+    /// Set this contract as the admin of downstream contracts to use it as a
+    /// single rotation point for the deployment.
+    fn forward(env: Env, target: Address, function: Symbol, args: Vec<Val>) -> Val;
 
     // Queries
     fn security_contract(env: Env) -> Address;

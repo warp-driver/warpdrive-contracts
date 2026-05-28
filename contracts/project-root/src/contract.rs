@@ -1,7 +1,7 @@
-use soroban_sdk::{Address, BytesN, Env, String, contract, contractimpl};
+use soroban_sdk::{Address, BytesN, Env, String, Symbol, Val, Vec, contract, contractimpl};
 
 use warpdrive_shared::interfaces::{
-    project_root::{ProjectRootInterface, UpdatedSpecRepo},
+    project_root::{Forwarded, ProjectRootInterface, UpdatedSpecRepo},
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
 
@@ -86,5 +86,12 @@ impl ProjectRootInterface for ProjectRoot {
 
     fn verification_type(env: Env) -> VerificationType {
         storage::get_verification_type(&env)
+    }
+
+    fn forward(env: Env, target: Address, function: Symbol, args: Vec<Val>) -> Val {
+        storage::get_admin(&env).require_auth();
+        storage::extend_instance_ttl(&env);
+        Forwarded::new(target.clone(), function.clone()).publish(&env);
+        env.invoke_contract::<Val>(&target, &function, args)
     }
 }
