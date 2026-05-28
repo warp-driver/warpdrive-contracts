@@ -103,10 +103,6 @@ impl ProjectRootInterface for ProjectRoot {
         storage::get_verification_type(&env)
     }
 
-    fn forward(env: Env, target: Address, function: Symbol, args: Vec<Val>) -> Val {
-        Self::proxy(&env, &target, function, args)
-    }
-
     // ── Typed helpers: registered security_contract ────────────────────
 
     fn add_secp256k1_signer(env: Env, key: BytesN<33>, weight: u64) -> Result<(), SecurityError> {

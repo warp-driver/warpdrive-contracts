@@ -23,7 +23,7 @@ extern crate std;
 
 use crate::{ProjectRoot, ProjectRootClient};
 use soroban_sdk::{
-    Address, Env, IntoVal, String, Symbol, Val, Vec,
+    Address, Env, IntoVal, String,
     testutils::{Address as _, MockAuth, MockAuthInvoke},
 };
 use warpdrive_ed25519_security::{Ed25519Security, Ed25519SecurityClient};
@@ -115,12 +115,7 @@ fn run_deployment_script(env: &Env) -> Deployment<'_> {
                 contract: &project_root.address,
                 fn_name: "accept_contract_admin",
                 args: ((*contract_addr).clone(),).into_val(env),
-                sub_invokes: &[MockAuthInvoke {
-                    contract: contract_addr,
-                    fn_name: "accept_admin",
-                    args: ().into_val(env),
-                    sub_invokes: &[],
-                }],
+                sub_invokes: &[],
             },
         }]);
         project_root.accept_contract_admin(contract_addr);
@@ -251,31 +246,6 @@ fn deployer_has_no_remaining_privileges_after_handover() {
             .is_err()
     );
 
-    let forward_target = d.security.address.clone();
-    let forward_function = Symbol::new(&env, "add_signer");
-    let mut forward_args: Vec<Val> = Vec::new(&env);
-    forward_args.push_back(new_signer.to_val());
-    forward_args.push_back(50u64.into_val(&env));
-    env.mock_auths(&[MockAuth {
-        address: &d.deployer,
-        invoke: &MockAuthInvoke {
-            contract: &d.project_root.address,
-            fn_name: "forward",
-            args: (
-                forward_target.clone(),
-                forward_function.clone(),
-                forward_args.clone(),
-            )
-                .into_val(&env),
-            sub_invokes: &[],
-        },
-    }]);
-    assert!(
-        d.project_root
-            .try_forward(&forward_target, &forward_function, &forward_args)
-            .is_err()
-    );
-
     // (e) Final state is unchanged by all those failed attempts.
     assert_eq!(d.security.get_signer_weight(&new_signer), 0);
 }
@@ -296,12 +266,7 @@ fn owner_can_set_signers_on_security_via_project_root() {
             contract: &d.project_root.address,
             fn_name: "add_ed25519_signer",
             args: (new_signer.clone(), weight).into_val(&env),
-            sub_invokes: &[MockAuthInvoke {
-                contract: &d.security.address,
-                fn_name: "add_signer",
-                args: (new_signer.clone(), weight).into_val(&env),
-                sub_invokes: &[],
-            }],
+            sub_invokes: &[],
         },
     }]);
     d.project_root.add_ed25519_signer(&new_signer, &weight);
@@ -329,12 +294,7 @@ fn owner_can_upgrade_verification_via_project_root() {
                 new_version.clone(),
             )
                 .into_val(&env),
-            sub_invokes: &[MockAuthInvoke {
-                contract: &d.verification.address,
-                fn_name: "upgrade",
-                args: (new_wasm_hash.clone(), new_version.clone()).into_val(&env),
-                sub_invokes: &[],
-            }],
+            sub_invokes: &[],
         },
     }]);
     d.project_root

@@ -1,5 +1,5 @@
 use soroban_sdk::{
-    Address, BytesN, Env, String, Symbol, Val, Vec, contractclient, contractevent, contracttype,
+    Address, BytesN, Env, String, Symbol, contractclient, contractevent, contracttype,
 };
 
 use super::security::SecurityError;
@@ -61,13 +61,6 @@ impl Forwarded {
 pub trait ProjectRootInterface: WarpDriveInterface {
     // State Changing Operations
     fn update_project_spec_repo(env: Env, repo: String);
-
-    /// Admin-gated proxy: invoke `function` on `target` with `args`, returning
-    /// the inner call's return value. Errors from the inner call propagate.
-    ///
-    /// Set this contract as the admin of downstream contracts to use it as a
-    /// single rotation point for the deployment.
-    fn forward(env: Env, target: Address, function: Symbol, args: Vec<Val>) -> Val;
 
     // ── Typed forward helpers to the registered security_contract ──────
 
