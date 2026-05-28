@@ -19,4 +19,6 @@ soroban-sdk = { workspace = true, features = ["testutils"] }
 warpdrive-secp256k1-security = { workspace = true }
 warpdrive-secp256k1-verification = { workspace = true }
 warpdrive-ed25519-security = { workspace = true }
+warpdrive-ed25519-verification = { workspace = true }
+warpdrive-stellar-handler = { workspace = true }
 warpdrive-shared = { workspace = true, features = ["testutils"] }

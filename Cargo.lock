@@ -1972,9 +1972,11 @@ version = "0.2.7"
 dependencies = [
  "soroban-sdk",
  "warpdrive-ed25519-security",
+ "warpdrive-ed25519-verification",
  "warpdrive-secp256k1-security",
  "warpdrive-secp256k1-verification",
  "warpdrive-shared",
+ "warpdrive-stellar-handler",
 ]
 
 [[package]]
