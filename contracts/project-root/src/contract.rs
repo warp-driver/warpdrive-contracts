@@ -43,6 +43,25 @@ impl ProjectRoot {
         Forwarded::new(target.clone(), function.clone()).publish(env);
         env.invoke_contract::<Val>(target, &function, args)
     }
+
+    /// Confirms `target` belongs to this project before forwarding an
+    /// admin-only call to it. The registered security and verification
+    /// contracts always pass. Any other target must respond to the
+    /// shared handler query `verification_contract()` with this project's
+    /// registered verification contract address.
+    fn ensure_our_contract(env: &Env, target: &Address) {
+        let verification = storage::get_verification_contract(env);
+        if target == &storage::get_security_contract(env) || target == &verification {
+            return;
+        }
+
+        let function = Symbol::new(env, "verification_contract");
+        let returned =
+            env.try_invoke_contract::<Address, soroban_sdk::Error>(target, &function, vec![env]);
+        if !matches!(&returned, Ok(Ok(addr)) if addr == &verification) {
+            panic!("target is not part of this project");
+        }
+    }
 }
 
 #[contractimpl]
@@ -146,18 +165,21 @@ impl ProjectRootInterface for ProjectRoot {
     // ── Typed helpers: WarpDriveInterface on any target ────────────────
 
     fn upgrade_contract(env: Env, target: Address, new_wasm_hash: BytesN<32>, new_version: String) {
+        Self::ensure_our_contract(&env, &target);
         let function = Symbol::new(&env, "upgrade");
         let args = vec![&env, new_wasm_hash.to_val(), new_version.to_val()];
         Self::proxy(&env, &target, function, args);
     }
 
     fn propose_contract_admin(env: Env, target: Address, new_admin: Address) {
+        Self::ensure_our_contract(&env, &target);
         let function = Symbol::new(&env, "propose_admin");
         let args = vec![&env, new_admin.to_val()];
         Self::proxy(&env, &target, function, args);
     }
 
     fn accept_contract_admin(env: Env, target: Address) {
+        Self::ensure_our_contract(&env, &target);
         let function = Symbol::new(&env, "accept_admin");
         let args = vec![&env];
         Self::proxy(&env, &target, function, args);
