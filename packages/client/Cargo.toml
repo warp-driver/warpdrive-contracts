@@ -13,8 +13,8 @@ crate-type = ["rlib"]
 
 [dependencies]
 ed25519-dalek = "2.2.0"
-wasi-soroban-rs = "0.2.7"
-wasi-soroban-rs-macros = "0.2.7"
+wasi-soroban-rs = "0.2.8"
+wasi-soroban-rs-macros = "0.2.8"
 stellar-strkey = "0.0.16"
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1", features = ["derive"], optional = true }

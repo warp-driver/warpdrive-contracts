@@ -7,6 +7,7 @@ pub mod cli;
 pub mod config;
 pub mod deploy;
 pub mod error;
+pub mod governance;
 pub mod identity;
 pub mod ledger;
 pub mod manifest;

@@ -6,11 +6,15 @@
 # sidecar on docker network `wdnet` — useful for offline iteration but
 # slower to bootstrap.
 #
-# Persists the generated identity + output JSON across invocations via host
-# bind mounts, so subsequent calls reuse the same admin.
+# Identity: the deployer's keyfile lives at /out/.keys/deployer.secret inside
+# the mounted OUT_DIR, so it persists across invocations. Before any command
+# that needs to sign, this wrapper runs `keygen` once (idempotent) to ensure a
+# funded identity exists; the actual command then reads that keyfile via the
+# default-keyfile precedence.
 #
 # Usage:
 #   ./smoke.sh deploy --output-path /out/deploy.json
+#   ./smoke.sh deploy --output-path /out/deploy-stellar.json --variant stellar
 #   ./smoke.sh get-ledger
 #   ./smoke.sh add-signer --scheme secp256k1 --key 0x... --weight 100 \
 #                          --deploy-file /out/deploy.json
@@ -19,8 +23,6 @@
 #
 # Env overrides (all optional):
 #   OUT_DIR              host dir mounted at /out (default: ./out)
-#   KEYS_DIR             host dir mounted at /root/.config/soroban
-#                        (default: ./out/.keys)
 #   IMAGE                middleware image (default: warpdrive-stellar-middleware:dev)
 #   QUICKSTART_IMAGE     local mode only; overrides the pinned default
 #   QUICKSTART_NAME      local mode only (default: stellar)
@@ -44,7 +46,6 @@ case "$NETWORK" in
 esac
 
 OUT_DIR="${OUT_DIR:-$(pwd)/out}"
-KEYS_DIR="${KEYS_DIR:-$OUT_DIR/.keys}"
 IMAGE="${IMAGE:-warpdrive-stellar-middleware:dev}"
 QUICKSTART_IMAGE="${QUICKSTART_IMAGE:-stellar/quickstart:v637-b1021.1-latest}"
 QUICKSTART_NAME="${QUICKSTART_NAME:-stellar}"
@@ -67,9 +68,8 @@ if [ "${1:-}" = "down" ]; then
     exit 0
 fi
 
-mkdir -p "$OUT_DIR" "$KEYS_DIR"
+mkdir -p "$OUT_DIR"
 OUT_DIR=$(cd "$OUT_DIR" && pwd)
-KEYS_DIR=$(cd "$KEYS_DIR" && pwd)
 
 if [ "$NETWORK" = "local" ]; then
     export RPC_URL="${RPC_URL:-http://${QUICKSTART_NAME}:8000/rpc}"
@@ -110,11 +110,6 @@ if [ "$NETWORK" = "local" ]; then
                 esac
             fi
         fi
-        # Friendbot: probe with no addr param. A ready friendbot returns 400
-        # "invalid request" (which curl -f treats as failure, exit 22). Both
-        # 200 and "exit 22 from a 4xx" mean friendbot is up; the failure mode
-        # we're trying to escape is the 502 (bad gateway) emitted by nginx
-        # while the upstream isn't running yet.
         if [ "$friendbot_ready" = 0 ]; then
             http_code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8000/friendbot" 2>/dev/null || true)
             case "$http_code" in
@@ -147,10 +142,24 @@ else
     [ -n "${FRIENDBOT_URL:-}" ] && DOCKER_ENV_ARGS+=(-e FRIENDBOT_URL)
 fi
 
-exec docker run --rm \
-    "${DOCKER_NET_ARGS[@]}" \
-    "${DOCKER_ENV_ARGS[@]}" \
-    -v "$OUT_DIR":/out \
-    -v "$KEYS_DIR":/root/.config/soroban \
-    "$IMAGE" \
-    /warpdrive/cli.sh "$@"
+run_deployer() {
+    docker run --rm \
+        "${DOCKER_NET_ARGS[@]}" \
+        "${DOCKER_ENV_ARGS[@]}" \
+        -v "$OUT_DIR":/out \
+        "$IMAGE" \
+        warpdrive-deployer "$@"
+}
+
+# Ensure a funded identity exists (idempotent) before any command that signs.
+cmd="${1:-}"
+case "$cmd" in
+    get-ledger|keygen|help|--help|-h|"") ;;
+    *)
+        echo "==> ensuring deployer identity (keygen)" >&2
+        run_deployer keygen >/dev/null
+        ;;
+esac
+
+exec_args=("$@")
+run_deployer "${exec_args[@]}"

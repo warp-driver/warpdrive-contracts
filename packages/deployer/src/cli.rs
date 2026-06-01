@@ -37,6 +37,15 @@ pub enum Command {
     GetLedger(GetLedgerArgs),
     /// Generate (if needed) and friendbot-fund a deployer identity keyfile.
     Keygen(KeygenArgs),
+    /// Propose a new admin for a governed contract (start a handover).
+    ProposeAdmin(ProposeAdminArgs),
+    /// Accept admin on a contract, signed by its pending admin.
+    AcceptAdmin(AcceptAdminArgs),
+    /// project_root accepts a downstream contract's admin on its own behalf.
+    AcceptContractAdmin(AcceptContractAdminArgs),
+    /// Composite: hand every downstream to project_root, then propose
+    /// project_root's admin to an owner (owner accepts separately).
+    Handover(HandoverArgs),
 }
 
 /// RPC coordinates needed for signing transactions.
@@ -141,6 +150,9 @@ pub struct AddSignerArgs {
     pub key: String,
     #[arg(long)]
     pub weight: u64,
+    /// Route the call through project_root's forwarder (post-handover mode).
+    #[arg(long)]
+    pub via_project_root: bool,
 }
 
 #[derive(Debug, Args)]
@@ -155,6 +167,9 @@ pub struct RemoveSignerArgs {
     pub scheme: crate::signers::Scheme,
     #[arg(long)]
     pub key: String,
+    /// Route the call through project_root's forwarder (post-handover mode).
+    #[arg(long)]
+    pub via_project_root: bool,
 }
 
 #[derive(Debug, Args)]
@@ -171,6 +186,9 @@ pub struct SetThresholdArgs {
     pub numerator: u64,
     #[arg(long)]
     pub denominator: u64,
+    /// Route the call through project_root's forwarder (post-handover mode).
+    #[arg(long)]
+    pub via_project_root: bool,
 }
 
 #[derive(Debug, Args)]
@@ -211,4 +229,59 @@ pub struct KeygenArgs {
     /// Explicit friendbot endpoint; else derived via getNetwork.
     #[arg(long, env = "FRIENDBOT_URL")]
     pub friendbot_url: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ProposeAdminArgs {
+    #[command(flatten)]
+    pub network: NetworkArgs,
+    #[command(flatten)]
+    pub identity: IdentityArgs,
+    #[command(flatten)]
+    pub deploy_file: DeployFileArg,
+    /// Which contract's admin to rotate.
+    #[arg(long, value_enum)]
+    pub target: crate::governance::Target,
+    /// New admin address (`G…` account or `C…` contract).
+    #[arg(long)]
+    pub new_admin: String,
+}
+
+#[derive(Debug, Args)]
+pub struct AcceptAdminArgs {
+    #[command(flatten)]
+    pub network: NetworkArgs,
+    #[command(flatten)]
+    pub identity: IdentityArgs,
+    #[command(flatten)]
+    pub deploy_file: DeployFileArg,
+    /// Which contract to accept admin on (signed by its pending admin).
+    #[arg(long, value_enum)]
+    pub target: crate::governance::Target,
+}
+
+#[derive(Debug, Args)]
+pub struct AcceptContractAdminArgs {
+    #[command(flatten)]
+    pub network: NetworkArgs,
+    #[command(flatten)]
+    pub identity: IdentityArgs,
+    #[command(flatten)]
+    pub deploy_file: DeployFileArg,
+    /// Downstream contract project_root should accept (security | verification).
+    #[arg(long, value_enum)]
+    pub target: crate::governance::Target,
+}
+
+#[derive(Debug, Args)]
+pub struct HandoverArgs {
+    #[command(flatten)]
+    pub network: NetworkArgs,
+    #[command(flatten)]
+    pub identity: IdentityArgs,
+    #[command(flatten)]
+    pub deploy_file: DeployFileArg,
+    /// Final owner of project_root (a `G…` multisig stand-in).
+    #[arg(long)]
+    pub owner: String,
 }

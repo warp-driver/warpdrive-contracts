@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 warpdrive-client = { path = "../client", features = ["manifest"] }
-wasi-soroban-rs = "0.2.7"
+wasi-soroban-rs = "0.2.8"
 ed25519-dalek = "2.2.0"
 stellar-strkey = "0.0.16"
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }

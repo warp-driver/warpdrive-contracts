@@ -45,8 +45,16 @@ set-threshold           # set numerator/denominator
 get-project-spec-repo   # read project_spec_repo
 set-project-spec-repo   # update project_spec_repo (admin)
 get-ledger              # print the latest ledger sequence
+propose-admin           # start rotating a contract's admin (--target ...)
+accept-admin            # accept admin, signed by the pending admin
+accept-contract-admin   # project_root accepts a downstream's admin
+handover                # composite: downstreams -> project_root -> owner
 help                    # usage
 ```
+
+`add-signer` / `remove-signer` / `set-threshold` accept `--via-project-root` to
+route through project_root's forwarder — the post-handover mode in which the
+deployer/owner can no longer call the security contract directly.
 
 Run `warpdrive-deployer <subcommand> --help` for the full flag list. Identity
 resolution precedence for the signing commands: `--secret` → `--secret-file` →
@@ -65,8 +73,18 @@ See [`docker/middleware/README.md`](../../docker/middleware/README.md) for the
 `docker run` / `docker exec warpdrive-deployer …` invocation and the `smoke.sh`
 wrapper.
 
-## Status
+## Governance handover
 
-Governance-handover and proxy-signer subcommands (`propose-admin`,
-`accept-contract-admin`, `handover`, `--via project-root`) are planned follow-up
-work (PLAN.md §5 / step 10) and not yet implemented here.
+`handover --owner <G…>` runs the full rotation (PLAN.md §5): each downstream's
+admin is proposed to project_root and accepted via `accept-contract-admin`, then
+project_root's own admin is proposed to the owner. It's idempotent (guards on
+`admin()`/`pending_admin()` reads), so a re-run resumes. The owner finishes with
+their own key:
+
+```bash
+warpdrive-deployer accept-admin --target project-root --secret S<owner> --deploy-file /out/deploy.json
+```
+
+After handover, signer changes route through project_root:
+`add-signer --via-project-root …`. The behaviour is exercised end-to-end by the
+`#[ignore]`d `tests/governance.rs` against a local Quickstart.
