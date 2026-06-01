@@ -290,7 +290,7 @@ fn contract_string_decodes_to_rust_string() {
 
     match from_sdk(&sdk_scval) {
         ScVal::String(ScString(s_m)) => {
-            let bytes: std::vec::Vec<u8> = s_m.as_vec().clone().into();
+            let bytes: std::vec::Vec<u8> = s_m.as_vec().clone();
             assert_eq!(String::from_utf8(bytes).unwrap(), expected);
         }
         other => panic!("unexpected: {:?}", other),
