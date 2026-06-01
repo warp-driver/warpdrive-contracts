@@ -5,8 +5,8 @@ members = [
     "packages/*",
     "tools/*",
 ]
-# This uses stdlib and must be compiled separately not to infect dependency trees
-exclude = ["packages/client"]
+# These use stdlib and must be compiled separately not to infect dependency trees
+exclude = ["packages/client", "packages/deployer"]
 default-members = [
     "contracts/*",
     "packages/*",

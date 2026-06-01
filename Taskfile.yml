@@ -39,9 +39,14 @@ tasks:
       - cd packages/client && cargo build
       - cd packages/client && RUSTFLAGS="--cfg tokio_unstable" cargo build --target wasm32-wasip2
 
+  build-deployer:
+    desc: Build deployer as native
+    cmds:
+      - cd packages/deployer && cargo build
+
   build:
     desc: Build contracts and client
-    deps: [build-contracts, build-client]
+    deps: [build-contracts, build-client, build-deployer]
 
   optimize:
     desc: Build contracts for deployment and optimize (uses stellar CLI for proper stripping)
@@ -54,6 +59,7 @@ tasks:
     cmds:
       - cargo test --lib
       - cd packages/client && cargo test
+      - cd packages/deployer && cargo test
 
   doc-test:
     desc: Run documentation tests
@@ -65,17 +71,23 @@ tasks:
     desc: Format all code
     cmds:
       - cargo fmt --all
+      - cd packages/client && cargo fmt
+      - cd packages/deployer && cargo fmt
 
   fmt-check:
     desc: Check formatting (CI)
     cmds:
       - cargo fmt --all --check
+      - cd packages/client && cargo fmt --check
+      - cd packages/deployer && cargo fmt --check
 
   clippy:
     desc: Lint all code
     deps: [build]
     cmds:
       - cargo clippy --all-targets -- -D warnings
+      - cd packages/client && cargo clippy --all-targets -- -D warnings
+      - cd packages/deployer && cargo clippy --all-targets -- -D warnings
 
   lint:
     desc: Format + lint
@@ -92,6 +104,8 @@ tasks:
     desc: Quick cargo check (no WASM build)
     cmds:
       - cargo check --all-targets
+      - cd packages/client && cargo check --all-targets
+      - cd packages/deployer && cargo check --all-targets
 
   publish:
     desc: Publish to crates.io

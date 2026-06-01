@@ -290,7 +290,7 @@ fn contract_string_decodes_to_rust_string() {
 
     match from_sdk(&sdk_scval) {
         ScVal::String(ScString(s_m)) => {
-            let bytes: std::vec::Vec<u8> = s_m.as_vec().clone().into();
+            let bytes: std::vec::Vec<u8> = s_m.as_vec().clone();
             assert_eq!(String::from_utf8(bytes).unwrap(), expected);
         }
         other => panic!("unexpected: {:?}", other),
@@ -409,11 +409,7 @@ fn xlm_envelope_client_to_shared_roundtrip() {
     // Client-encoded XDR bytes must decode into the shared `XlmEnvelope`
     // contracttype with the same field values.
     let env = Env::default();
-    let client = ClientXlmEnvelope::new(
-        vec![0xAA, 0xBB, 0xCC, 0xDD, 0xEE],
-        [0x11; 20],
-        [0x22; 12],
-    );
+    let client = ClientXlmEnvelope::new(vec![0xAA, 0xBB, 0xCC, 0xDD, 0xEE], [0x11; 20], [0x22; 12]);
     let xdr_bytes = client.encode().expect("client encode");
 
     let parsed = XlmEnvelope::decode(Some(&env), &xdr_bytes).expect("shared decode");

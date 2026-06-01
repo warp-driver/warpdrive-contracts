@@ -1,5 +1,7 @@
 // This file runs some queries on the testnet deploy
 
+#![allow(deprecated)] // legacy .testnet/*.id loader; see loader::testnet docs
+
 use ed25519_dalek::SigningKey;
 use warpdrive_client::loader::testnet;
 use wasi_soroban_rs::{Account, ClientContractConfigs, Env, EnvConfigs, Signer};
@@ -42,7 +44,7 @@ async fn main() {
     println!("Signing Account: {}", account.account_id());
 
     let mut client: ClientContractConfigs = ClientContractConfigs {
-        contract_id: cfg.project_root.clone(),
+        contract_id: cfg.project_root,
         env: Env::new(env_config.clone()).unwrap(),
         source_account: account.clone(),
     };
