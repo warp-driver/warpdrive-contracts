@@ -1,11 +1,24 @@
-//! Direct signer-set management against the variant's security contract:
-//! `add-signer`, `remove-signer`, `set-threshold`. These are the pre-handover
-//! (deployer-is-admin) operations that match the shell deployer 1:1.
+//! Signer-set management against the variant's security contract:
+//! `add-signer`, `remove-signer`, `set-threshold`.
+//!
+//! Each op works in two modes:
+//! - **direct** (pre-handover): the deployer is the security contract's admin
+//!   and calls it directly;
+//! - **`--via project-root`** (post-handover, PLAN.md §5): the security
+//!   contract's admin is now project_root, so changes route through
+//!   project_root's `add_{secp,ed}_signer` / `remove_*` / `set_threshold`
+//!   forwarders, authorized by project_root's admin.
+//!
+//! Both modes — and both schemes (secp256k1/ed25519) — are unified behind the
+//! [`SecurityClient`] enum so each public fn is a thin wrapper rather than a
+//! four-way `match scheme { … }` ladder.
 
 use warpdrive_client::ed25519_security::Ed25519SecurityClient;
 use warpdrive_client::project_root::ProjectRootClient;
 use warpdrive_client::secp256k1_security::Secp256k1SecurityClient;
-use wasi_soroban_rs::{Account, SorobanTransactionResponse};
+use wasi_soroban_rs::{
+    Account, ClientContractConfigs, ContractId, SorobanHelperError, SorobanTransactionResponse,
+};
 
 use crate::config::{NetworkConfig, client_configs};
 use crate::error::{DeployerError, Result};
@@ -78,17 +91,111 @@ fn require_scheme_matches(manifest: &StellarDeployManifest, scheme: Scheme) -> R
     Ok(())
 }
 
-/// Resolve the security contract for `scheme`, ensuring the manifest's variant
-/// matches.
-fn security_for(
+/// Resolve which contract the call targets: the security contract directly, or
+/// project_root (the forwarder) when `via_project_root`. Validates the scheme
+/// against the manifest variant either way.
+fn signer_target(
     manifest: &StellarDeployManifest,
     scheme: Scheme,
-) -> Result<wasi_soroban_rs::ContractId> {
+    via_project_root: bool,
+) -> Result<ContractId> {
     require_scheme_matches(manifest, scheme)?;
-    require_security(manifest)
+    if via_project_root {
+        require_project_root(manifest)
+    } else {
+        require_security(manifest)
+    }
 }
 
-/// `add-signer`: register or update a signer's weight on the security contract.
+// ── Unified client ───────────────────────────────────────────────────────────
+//
+// The security clients and `ProjectRootClient` are distinct concrete types
+// (async-fn-in-trait → not object-safe), and each scheme is its own type. This
+// enum is the single place that knows the scheme/mode → method mapping, so the
+// public fns don't each carry a `match scheme { … try_into … }` ladder.
+
+enum SecurityClient {
+    Secp(Secp256k1SecurityClient),
+    Ed(Ed25519SecurityClient),
+    /// Forward through project_root; `scheme` selects the forwarder method.
+    Proxy {
+        client: ProjectRootClient,
+        scheme: Scheme,
+    },
+}
+
+/// `parse_key` already validated the length, so these conversions never fail.
+fn to_secp(key: &[u8]) -> [u8; 33] {
+    key.try_into().expect("length checked by parse_key")
+}
+fn to_ed(key: &[u8]) -> [u8; 32] {
+    key.try_into().expect("length checked by parse_key")
+}
+
+impl SecurityClient {
+    fn new(configs: ClientContractConfigs, scheme: Scheme, via_project_root: bool) -> Self {
+        if via_project_root {
+            SecurityClient::Proxy {
+                client: ProjectRootClient::new(configs),
+                scheme,
+            }
+        } else {
+            match scheme {
+                Scheme::Secp256k1 => SecurityClient::Secp(Secp256k1SecurityClient::new(configs)),
+                Scheme::Ed25519 => SecurityClient::Ed(Ed25519SecurityClient::new(configs)),
+            }
+        }
+    }
+
+    async fn add_signer(
+        &mut self,
+        key: &[u8],
+        weight: u64,
+    ) -> std::result::Result<SorobanTransactionResponse, SorobanHelperError> {
+        match self {
+            SecurityClient::Secp(c) => c.add_signer(to_secp(key), weight).await,
+            SecurityClient::Ed(c) => c.add_signer(to_ed(key), weight).await,
+            SecurityClient::Proxy { client, scheme } => match *scheme {
+                Scheme::Secp256k1 => client.add_secp256k1_signer(to_secp(key), weight).await,
+                Scheme::Ed25519 => client.add_ed25519_signer(to_ed(key), weight).await,
+            },
+        }
+    }
+
+    async fn remove_signer(
+        &mut self,
+        key: &[u8],
+    ) -> std::result::Result<SorobanTransactionResponse, SorobanHelperError> {
+        match self {
+            SecurityClient::Secp(c) => c.remove_signer(to_secp(key)).await,
+            SecurityClient::Ed(c) => c.remove_signer(to_ed(key)).await,
+            SecurityClient::Proxy { client, scheme } => match *scheme {
+                Scheme::Secp256k1 => client.remove_secp256k1_signer(to_secp(key)).await,
+                Scheme::Ed25519 => client.remove_ed25519_signer(to_ed(key)).await,
+            },
+        }
+    }
+
+    async fn set_threshold(
+        &mut self,
+        numerator: u64,
+        denominator: u64,
+    ) -> std::result::Result<SorobanTransactionResponse, SorobanHelperError> {
+        match self {
+            SecurityClient::Secp(c) => c.set_threshold(numerator, denominator).await,
+            SecurityClient::Ed(c) => c.set_threshold(numerator, denominator).await,
+            SecurityClient::Proxy { client, .. } => {
+                client.set_threshold(numerator, denominator).await
+            }
+        }
+    }
+}
+
+// ── Subcommands ──────────────────────────────────────────────────────────────
+
+/// `add-signer`: register or update a signer's weight. `via_project_root`
+/// selects the post-handover forwarder path.
+#[allow(clippy::too_many_arguments)] // independent CLI params; bundling would obscure
 pub async fn add_signer(
     net: &NetworkConfig,
     account: &Account,
@@ -96,30 +203,20 @@ pub async fn add_signer(
     scheme: Scheme,
     key_hex: &str,
     weight: u64,
+    via_project_root: bool,
     retry_cfg: RetryConfig,
 ) -> Result<String> {
-    let security = security_for(manifest, scheme)?;
+    let target = signer_target(manifest, scheme, via_project_root)?;
     let key = parse_key(scheme, key_hex)?;
-    let configs = client_configs(net, account, security)?;
+    let configs = client_configs(net, account, target)?;
 
-    let resp: SorobanTransactionResponse = retry(retry_cfg, || {
+    let resp = retry(retry_cfg, || {
         let configs = configs.clone();
         let key = key.clone();
         async move {
-            match scheme {
-                Scheme::Secp256k1 => {
-                    let arr: [u8; 33] = key.try_into().expect("length checked by parse_key");
-                    Secp256k1SecurityClient::new(configs)
-                        .add_signer(arr, weight)
-                        .await
-                }
-                Scheme::Ed25519 => {
-                    let arr: [u8; 32] = key.try_into().expect("length checked by parse_key");
-                    Ed25519SecurityClient::new(configs)
-                        .add_signer(arr, weight)
-                        .await
-                }
-            }
+            SecurityClient::new(configs, scheme, via_project_root)
+                .add_signer(&key, weight)
+                .await
         }
     })
     .await?;
@@ -127,35 +224,27 @@ pub async fn add_signer(
     Ok(tx_hash(&resp))
 }
 
-/// `remove-signer`: drop a signer from the security contract.
+/// `remove-signer`: drop a signer.
 pub async fn remove_signer(
     net: &NetworkConfig,
     account: &Account,
     manifest: &StellarDeployManifest,
     scheme: Scheme,
     key_hex: &str,
+    via_project_root: bool,
     retry_cfg: RetryConfig,
 ) -> Result<String> {
-    let security = security_for(manifest, scheme)?;
+    let target = signer_target(manifest, scheme, via_project_root)?;
     let key = parse_key(scheme, key_hex)?;
-    let configs = client_configs(net, account, security)?;
+    let configs = client_configs(net, account, target)?;
 
-    let resp: SorobanTransactionResponse = retry(retry_cfg, || {
+    let resp = retry(retry_cfg, || {
         let configs = configs.clone();
         let key = key.clone();
         async move {
-            match scheme {
-                Scheme::Secp256k1 => {
-                    let arr: [u8; 33] = key.try_into().expect("length checked by parse_key");
-                    Secp256k1SecurityClient::new(configs)
-                        .remove_signer(arr)
-                        .await
-                }
-                Scheme::Ed25519 => {
-                    let arr: [u8; 32] = key.try_into().expect("length checked by parse_key");
-                    Ed25519SecurityClient::new(configs).remove_signer(arr).await
-                }
-            }
+            SecurityClient::new(configs, scheme, via_project_root)
+                .remove_signer(&key)
+                .await
         }
     })
     .await?;
@@ -163,7 +252,8 @@ pub async fn remove_signer(
     Ok(tx_hash(&resp))
 }
 
-/// `set-threshold`: update `numerator/denominator` on the security contract.
+/// `set-threshold`: update `numerator/denominator`.
+#[allow(clippy::too_many_arguments)] // independent CLI params; bundling would obscure
 pub async fn set_threshold(
     net: &NetworkConfig,
     account: &Account,
@@ -171,134 +261,16 @@ pub async fn set_threshold(
     scheme: Scheme,
     numerator: u64,
     denominator: u64,
+    via_project_root: bool,
     retry_cfg: RetryConfig,
 ) -> Result<String> {
-    let security = security_for(manifest, scheme)?;
-    let configs = client_configs(net, account, security)?;
+    let target = signer_target(manifest, scheme, via_project_root)?;
+    let configs = client_configs(net, account, target)?;
 
-    let resp: SorobanTransactionResponse = retry(retry_cfg, || {
+    let resp = retry(retry_cfg, || {
         let configs = configs.clone();
         async move {
-            match scheme {
-                Scheme::Secp256k1 => {
-                    Secp256k1SecurityClient::new(configs)
-                        .set_threshold(numerator, denominator)
-                        .await
-                }
-                Scheme::Ed25519 => {
-                    Ed25519SecurityClient::new(configs)
-                        .set_threshold(numerator, denominator)
-                        .await
-                }
-            }
-        }
-    })
-    .await?;
-
-    Ok(tx_hash(&resp))
-}
-
-// ── Proxy mode: route through project_root's forwarders ──────────────────────
-//
-// After the admin handover (PLAN.md §5), the deployer/owner can no longer call
-// the security contract directly; signer changes route through project_root's
-// `add_{secp,ed}_signer` / `remove_*` / `set_threshold` forwarders, authorized
-// by project_root's admin.
-
-/// `add-signer --via project-root`.
-pub async fn add_signer_via_project_root(
-    net: &NetworkConfig,
-    account: &Account,
-    manifest: &StellarDeployManifest,
-    scheme: Scheme,
-    key_hex: &str,
-    weight: u64,
-    retry_cfg: RetryConfig,
-) -> Result<String> {
-    require_scheme_matches(manifest, scheme)?;
-    let key = parse_key(scheme, key_hex)?;
-    let configs = client_configs(net, account, require_project_root(manifest)?)?;
-
-    let resp: SorobanTransactionResponse = retry(retry_cfg, || {
-        let configs = configs.clone();
-        let key = key.clone();
-        async move {
-            match scheme {
-                Scheme::Secp256k1 => {
-                    let arr: [u8; 33] = key.try_into().expect("length checked by parse_key");
-                    ProjectRootClient::new(configs)
-                        .add_secp256k1_signer(arr, weight)
-                        .await
-                }
-                Scheme::Ed25519 => {
-                    let arr: [u8; 32] = key.try_into().expect("length checked by parse_key");
-                    ProjectRootClient::new(configs)
-                        .add_ed25519_signer(arr, weight)
-                        .await
-                }
-            }
-        }
-    })
-    .await?;
-
-    Ok(tx_hash(&resp))
-}
-
-/// `remove-signer --via project-root`.
-pub async fn remove_signer_via_project_root(
-    net: &NetworkConfig,
-    account: &Account,
-    manifest: &StellarDeployManifest,
-    scheme: Scheme,
-    key_hex: &str,
-    retry_cfg: RetryConfig,
-) -> Result<String> {
-    require_scheme_matches(manifest, scheme)?;
-    let key = parse_key(scheme, key_hex)?;
-    let configs = client_configs(net, account, require_project_root(manifest)?)?;
-
-    let resp: SorobanTransactionResponse = retry(retry_cfg, || {
-        let configs = configs.clone();
-        let key = key.clone();
-        async move {
-            match scheme {
-                Scheme::Secp256k1 => {
-                    let arr: [u8; 33] = key.try_into().expect("length checked by parse_key");
-                    ProjectRootClient::new(configs)
-                        .remove_secp256k1_signer(arr)
-                        .await
-                }
-                Scheme::Ed25519 => {
-                    let arr: [u8; 32] = key.try_into().expect("length checked by parse_key");
-                    ProjectRootClient::new(configs)
-                        .remove_ed25519_signer(arr)
-                        .await
-                }
-            }
-        }
-    })
-    .await?;
-
-    Ok(tx_hash(&resp))
-}
-
-/// `set-threshold --via project-root`.
-pub async fn set_threshold_via_project_root(
-    net: &NetworkConfig,
-    account: &Account,
-    manifest: &StellarDeployManifest,
-    scheme: Scheme,
-    numerator: u64,
-    denominator: u64,
-    retry_cfg: RetryConfig,
-) -> Result<String> {
-    require_scheme_matches(manifest, scheme)?;
-    let configs = client_configs(net, account, require_project_root(manifest)?)?;
-
-    let resp: SorobanTransactionResponse = retry(retry_cfg, || {
-        let configs = configs.clone();
-        async move {
-            ProjectRootClient::new(configs)
+            SecurityClient::new(configs, scheme, via_project_root)
                 .set_threshold(numerator, denominator)
                 .await
         }

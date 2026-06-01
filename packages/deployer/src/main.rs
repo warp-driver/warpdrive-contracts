@@ -19,10 +19,7 @@ use warpdrive_deployer::ledger::get_latest_ledger;
 use warpdrive_deployer::manifest::{Variant, load as load_manifest};
 use warpdrive_deployer::project_root::{get_project_spec_repo, set_project_spec_repo};
 use warpdrive_deployer::retry::RetryConfig;
-use warpdrive_deployer::signers::{
-    add_signer, add_signer_via_project_root, remove_signer, remove_signer_via_project_root,
-    set_threshold, set_threshold_via_project_root,
-};
+use warpdrive_deployer::signers::{add_signer, remove_signer, set_threshold};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -68,29 +65,17 @@ async fn run(cli: Cli) -> Result<()> {
             let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
-            let hash = if args.via_project_root {
-                add_signer_via_project_root(
-                    &net,
-                    &account,
-                    &manifest,
-                    args.scheme,
-                    &args.key,
-                    args.weight,
-                    retry_cfg,
-                )
-                .await?
-            } else {
-                add_signer(
-                    &net,
-                    &account,
-                    &manifest,
-                    args.scheme,
-                    &args.key,
-                    args.weight,
-                    retry_cfg,
-                )
-                .await?
-            };
+            let hash = add_signer(
+                &net,
+                &account,
+                &manifest,
+                args.scheme,
+                &args.key,
+                args.weight,
+                args.via_project_root,
+                retry_cfg,
+            )
+            .await?;
             println!("{hash}");
         }
 
@@ -98,19 +83,16 @@ async fn run(cli: Cli) -> Result<()> {
             let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
-            let hash = if args.via_project_root {
-                remove_signer_via_project_root(
-                    &net,
-                    &account,
-                    &manifest,
-                    args.scheme,
-                    &args.key,
-                    retry_cfg,
-                )
-                .await?
-            } else {
-                remove_signer(&net, &account, &manifest, args.scheme, &args.key, retry_cfg).await?
-            };
+            let hash = remove_signer(
+                &net,
+                &account,
+                &manifest,
+                args.scheme,
+                &args.key,
+                args.via_project_root,
+                retry_cfg,
+            )
+            .await?;
             println!("{hash}");
         }
 
@@ -118,29 +100,17 @@ async fn run(cli: Cli) -> Result<()> {
             let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
-            let hash = if args.via_project_root {
-                set_threshold_via_project_root(
-                    &net,
-                    &account,
-                    &manifest,
-                    args.scheme,
-                    args.numerator,
-                    args.denominator,
-                    retry_cfg,
-                )
-                .await?
-            } else {
-                set_threshold(
-                    &net,
-                    &account,
-                    &manifest,
-                    args.scheme,
-                    args.numerator,
-                    args.denominator,
-                    retry_cfg,
-                )
-                .await?
-            };
+            let hash = set_threshold(
+                &net,
+                &account,
+                &manifest,
+                args.scheme,
+                args.numerator,
+                args.denominator,
+                args.via_project_root,
+                retry_cfg,
+            )
+            .await?;
             println!("{hash}");
         }
 

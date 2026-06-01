@@ -22,7 +22,7 @@ use warpdrive_deployer::governance::{Target, accept_admin, handover};
 use warpdrive_deployer::identity::{account_from_secret, keygen_and_fund, read_key_file};
 use warpdrive_deployer::manifest::Variant;
 use warpdrive_deployer::retry::RetryConfig;
-use warpdrive_deployer::signers::{Scheme, add_signer, add_signer_via_project_root};
+use warpdrive_deployer::signers::{Scheme, add_signer};
 
 fn env_or_skip(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| panic!("set {name} to run the governance test"))
@@ -82,6 +82,7 @@ async fn handover_strips_deployer_privileges() {
         Scheme::Secp256k1,
         &signer,
         100,
+        false,
         retry_cfg,
     )
     .await
@@ -106,6 +107,7 @@ async fn handover_strips_deployer_privileges() {
         Scheme::Secp256k1,
         &format!("02{}", "22".repeat(32)),
         50,
+        false,
         retry_cfg,
     )
     .await;
@@ -115,13 +117,14 @@ async fn handover_strips_deployer_privileges() {
     );
 
     // The owner governs through project_root's forwarder.
-    add_signer_via_project_root(
+    add_signer(
         &net,
         &owner,
         &manifest,
         Scheme::Secp256k1,
         &format!("02{}", "33".repeat(32)),
         75,
+        true,
         retry_cfg,
     )
     .await

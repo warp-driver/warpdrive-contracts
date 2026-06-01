@@ -92,6 +92,7 @@ async fn full_pipeline() {
         Scheme::Secp256k1,
         &secp_key,
         100,
+        false,
         retry_cfg,
     )
     .await
@@ -106,6 +107,7 @@ async fn full_pipeline() {
         Scheme::Secp256k1,
         1,
         2,
+        false,
         retry_cfg,
     )
     .await
