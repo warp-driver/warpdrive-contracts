@@ -260,12 +260,13 @@ async fn deploy_handler_records_handler_in_manifest() {
 }
 
 #[tokio::test]
-async fn deploy_handler_errors_without_verification() {
+async fn deploy_handler_errors_when_pipeline_incomplete() {
     let wasm = wasm_dir();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("deploy.json");
 
-    // Manifest with only the security contract — no verification to bind to.
+    // Manifest with only the security contract — no project_root (the handler's
+    // admin) and no verification (its target) to bind to.
     let mut pre = StellarDeployManifest::new("GOLD".to_string(), Variant::Ethereum);
     pre.contracts.secp256k1_security = Some(cid(2));
     pre.persist(&path).unwrap();

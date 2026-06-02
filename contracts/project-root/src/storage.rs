@@ -92,22 +92,28 @@ pub fn get_handlers(env: &Env) -> Vec<Address> {
 }
 
 /// Registers `handler`, ignoring the call if it is already present so the set
-/// stays free of duplicates.
-pub fn add_handler(env: &Env, handler: &Address) {
+/// stays free of duplicates. Returns `true` if the handler was newly added,
+/// `false` if it was already tracked (so callers can avoid re-emitting events).
+pub fn add_handler(env: &Env, handler: &Address) -> bool {
     let mut handlers = get_handlers(env);
     if handlers.first_index_of(handler).is_some() {
-        return;
+        return false;
     }
     handlers.push_back(handler.clone());
     env.storage().instance().set(&DataKey::Handlers, &handlers);
+    true
 }
 
-/// Removes `handler` if present; a no-op when it isn't registered.
-pub fn remove_handler(env: &Env, handler: &Address) {
+/// Removes `handler` if present. Returns `true` if an entry was removed,
+/// `false` when it wasn't tracked (so callers can avoid emitting events).
+pub fn remove_handler(env: &Env, handler: &Address) -> bool {
     let mut handlers = get_handlers(env);
     if let Some(index) = handlers.first_index_of(handler) {
         handlers.remove(index);
         env.storage().instance().set(&DataKey::Handlers, &handlers);
+        true
+    } else {
+        false
     }
 }
 

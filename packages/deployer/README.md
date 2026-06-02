@@ -73,10 +73,10 @@ old shell deployer's `deploy.json` for handler-free deployments — the optional
 ## Handlers
 
 `deploy` provisions only the pipeline (security + verification) and
-project-root. Handler contracts are deployed and governed separately:
+project-root. Handler contracts are deployed and tracked separately:
 
 ```bash
-# deploy the variant's handler and hand its admin to project_root in one shot
+# deploy the variant's handler (admin = project_root) and track it in one shot
 warpdrive-deployer deploy-handler --deploy-file /out/deploy.json --register
 # (or run the steps individually)
 warpdrive-deployer deploy-handler   --deploy-file /out/deploy.json
@@ -85,12 +85,20 @@ warpdrive-deployer register-handler --deploy-file /out/deploy.json
 warpdrive-deployer list-handlers --deploy-file /out/deploy.json
 ```
 
-`deploy-handler` deploys the variant's handler (admin = the deployer, pointing
-at the manifest's verification contract) and records it in the manifest.
-`register-handler` runs the propose/accept-admin dance so project_root becomes
-the handler's admin, which adds it to project_root's tracked set surfaced by
-`list-handlers`. Both are idempotent and must run while the deployer is still
-project_root's admin (i.e. before `handover`).
+**Canonical flow.** `deploy-handler` deploys the variant's handler with
+**project_root as its admin** (pointing at the manifest's verification contract)
+and records it in the manifest. `register-handler` then calls project_root's
+`register_handler` to add it to the tracked set surfaced by `list-handlers` —
+a single call, no admin-handover dance. `register-handler` must run while the
+deployer is still project_root's admin (i.e. before `handover`); both steps are
+idempotent.
+
+**Alternative (handover) flow.** A handler deployed under a different admin can
+instead be brought in by handing its admin to project_root —
+`propose-admin --target handler` then `accept-contract-admin --target handler` —
+which auto-registers it on accept. Either way, removing a handler from the set
+is always explicit (`unregister_handler` on the contract); rotating its admin
+away does not untrack it.
 
 ## Docker
 

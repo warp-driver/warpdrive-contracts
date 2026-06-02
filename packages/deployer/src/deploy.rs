@@ -13,7 +13,7 @@ use wasi_soroban_rs::{Account, Contract, ContractId, Env, IntoScVal};
 
 use crate::config::NetworkConfig;
 use crate::error::{DeployerError, Result};
-use crate::manifest::{StellarDeployManifest, Variant, require_verification};
+use crate::manifest::{StellarDeployManifest, Variant, require_project_root, require_verification};
 use crate::retry::{RetryConfig, retry};
 
 // Wasm filenames, resolved against `--wasm-dir`.
@@ -275,15 +275,15 @@ pub async fn deploy_pipeline(
     Ok(manifest)
 }
 
-/// `deploy-handler`: deploy the variant's handler contract (admin = the
-/// deployer, verification = the manifest's verification contract) and record it
-/// in the manifest's handler slot. Idempotent — a re-run reuses an
-/// already-deployed handler.
+/// `deploy-handler`: deploy the variant's handler contract with project_root as
+/// its admin from birth (canonical flow), pointing at the manifest's
+/// verification contract, and record it in the manifest's handler slot.
+/// Idempotent — a re-run reuses an already-deployed handler.
 ///
-/// The pipeline must already be deployed: the verification contract is read
-/// from the manifest at `manifest_path`. Registering the handler with
-/// project_root (the propose/accept-admin dance) is a separate step —
-/// `governance::register_handler`.
+/// The pipeline must already be deployed: the project_root (the handler's admin)
+/// and verification contracts are read from the manifest at `manifest_path`.
+/// Tracking the handler in project_root's set is a separate, cheaper step than
+/// the admin-handover dance — `governance::register_handler`.
 pub async fn deploy_handler(
     env: &Env,
     account: &Account,
@@ -298,13 +298,16 @@ pub async fn deploy_handler(
         return Ok(manifest);
     }
 
+    // The handler is born admin'd by project_root, so it can be tracked with a
+    // single register_handler call rather than the propose/accept dance.
+    let project_root = require_project_root(&manifest)?;
     let verification = require_verification(&manifest)?;
     let id = deploy_one(
         env,
         account,
         wasm_dir,
         handler_wasm(manifest.variant),
-        handler_ctor_args(admin_scval(account), verification),
+        handler_ctor_args(contract_scval(project_root), verification),
         retry_cfg,
         "handler",
     )

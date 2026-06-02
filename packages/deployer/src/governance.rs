@@ -267,49 +267,33 @@ pub async fn handover(
     Ok(())
 }
 
-/// `register-handler` (composite): hand the deployed handler's admin to
-/// project_root via the propose/accept dance, so it joins project_root's
-/// tracked handler set (surfaced by `list-handlers`). The handler must already
-/// be deployed (`deploy-handler`). Signed by the deployer, who is both the
-/// handler's admin and project_root's admin pre-handover. Idempotent via an
-/// `admin()`/`pending_admin()` read, so a re-run resumes.
+/// `register-handler`: track the deployed handler in project_root's handler set
+/// by calling project_root's `register_handler`, signed by project_root's admin.
+/// The canonical flow deploys the handler with project_root already as its admin
+/// (`deploy-handler`), so this is a single call — no propose/accept dance.
+/// Idempotent on-chain (re-registering an already-tracked handler is a no-op).
+///
+/// (A handler deployed under a different admin can instead be brought in via the
+/// handover dance — `propose-admin --target handler` then
+/// `accept-contract-admin --target handler` — which auto-registers on accept.)
 pub async fn register_handler(
     env: &Env,
     account: &Account,
     m: &StellarDeployManifest,
     retry_cfg: RetryConfig,
-) -> Result<()> {
+) -> Result<String> {
     let project_root = require_project_root(m)?;
-    let pr_addr = contract_scaddress(project_root);
-    let project_root_str = project_root.to_string();
-    // Surface a clear error before any network call if no handler is deployed.
-    require_handler(m)?;
+    let handler = require_handler(m)?;
 
-    let current = AnyClient::build(env, account, m, Target::Handler)?
-        .admin()
-        .await?;
-    if current == pr_addr {
-        eprintln!("=== handler already owned by project_root ===");
-        return Ok(());
-    }
-    let pending = AnyClient::build(env, account, m, Target::Handler)?
-        .pending_admin()
-        .await?;
-    if pending.as_ref() != Some(&pr_addr) {
-        eprintln!("=== proposing project_root as admin of handler ===");
-        propose_admin(
-            env,
-            account,
-            m,
-            Target::Handler,
-            &project_root_str,
-            retry_cfg,
-        )
-        .await?;
-    }
-    eprintln!("=== project_root accepting admin of handler (registers it) ===");
-    accept_contract_admin(env, account, m, Target::Handler, retry_cfg).await?;
-    Ok(())
+    let resp = retry(retry_cfg, || async move {
+        let cfg = client_configs(env, account, project_root);
+        ProjectRootClient::new(cfg)
+            .register_handler(handler)
+            .await
+            .map_err(DeployerError::from)
+    })
+    .await?;
+    Ok(tx_hash(&resp))
 }
 
 #[cfg(test)]

@@ -2,8 +2,9 @@ extern crate std;
 
 use crate::{ProjectRoot, ProjectRootClient};
 use soroban_sdk::{
-    Address, Env, IntoVal, InvokeError, String,
-    testutils::{Address as _, MockAuth, MockAuthInvoke},
+    Address, Env, IntoVal, InvokeError, Map, String, Symbol, Val,
+    testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke},
+    vec,
 };
 use warpdrive_ed25519_security::{Ed25519Security, Ed25519SecurityClient};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
@@ -607,8 +608,96 @@ fn accept_contract_admin_tracks_handler_in_list() {
 }
 
 #[test]
-fn propose_contract_admin_untracks_handler_from_list() {
-    // Rotating a tracked handler's admin away drops it from list_handlers.
+fn register_handler_tracks_handler_and_is_idempotent() {
+    // Canonical flow: the handler is born with project_root as its admin, then
+    // register_handler tracks it — no admin-handover dance.
+    use warpdrive_ed25519_verification::Ed25519Verification;
+    use warpdrive_stellar_handler::{StellarHandler, StellarHandlerClient};
+
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let repo = String::from_str(&env, "https://github.com/example/spec");
+    let security_id = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let verification_id = env.register(Ed25519Verification, (&admin, &security_id));
+    let project_root_id = env.register(
+        ProjectRoot,
+        (
+            &admin,
+            &security_id,
+            &verification_id,
+            &repo,
+            VerificationType::Stellar,
+        ),
+    );
+    let project_root = ProjectRootClient::new(&env, &project_root_id);
+
+    // Born admin'd by project_root.
+    let handler_id = env.register(StellarHandler, (&project_root_id, &verification_id));
+    let handler = StellarHandlerClient::new(&env, &handler_id);
+    assert_eq!(handler.admin(), project_root.address);
+
+    assert_eq!(project_root.list_handlers(), vec![&env]);
+    project_root.register_handler(&handler.address);
+    assert_eq!(
+        project_root.list_handlers(),
+        vec![&env, handler.address.clone()]
+    );
+
+    // Re-registering is a no-op — no duplicate entry.
+    project_root.register_handler(&handler.address);
+    assert_eq!(project_root.list_handlers(), vec![&env, handler.address]);
+}
+
+#[test]
+fn register_handler_rejects_non_handler_and_foreign_targets() {
+    use warpdrive_ed25519_verification::Ed25519Verification;
+    use warpdrive_stellar_handler::{StellarHandler, StellarHandlerClient};
+
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let repo = String::from_str(&env, "https://github.com/example/spec");
+    let security_id = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let verification_id = env.register(Ed25519Verification, (&admin, &security_id));
+    let project_root_id = env.register(
+        ProjectRoot,
+        (
+            &admin,
+            &security_id,
+            &verification_id,
+            &repo,
+            VerificationType::Stellar,
+        ),
+    );
+    let project_root = ProjectRootClient::new(&env, &project_root_id);
+
+    // The registered security/verification contracts are ours, but they are
+    // not handlers.
+    assert_eq!(
+        project_root.try_register_handler(&security_id),
+        Err(Ok(ProjectRootError::NotAHandler))
+    );
+
+    // A handler pointing at a *different* verification is foreign.
+    let other_security = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let other_verification = env.register(Ed25519Verification, (&admin, &other_security));
+    let foreign_handler = env.register(StellarHandler, (&admin, &other_verification));
+    let foreign = StellarHandlerClient::new(&env, &foreign_handler);
+    assert_eq!(
+        project_root.try_register_handler(&foreign.address),
+        Err(Ok(ProjectRootError::NotOurContract))
+    );
+
+    assert_eq!(project_root.list_handlers(), vec![&env]);
+}
+
+#[test]
+fn propose_contract_admin_does_not_untrack_handler() {
+    // Rotating a tracked handler's admin away must NOT drop it from the set —
+    // removal is always explicit via unregister_handler.
     let env = Env::default();
     env.mock_all_auths();
 
@@ -617,13 +706,71 @@ fn propose_contract_admin_untracks_handler_from_list() {
     project_root.accept_contract_admin(&handler.address);
     assert_eq!(
         project_root.list_handlers(),
-        soroban_sdk::vec![&env, handler.address.clone()]
+        vec![&env, handler.address.clone()]
     );
 
+    // Begin rotating the handler's admin away — it stays tracked.
     let next_admin = Address::generate(&env);
     project_root.propose_contract_admin(&handler.address, &next_admin);
+    assert_eq!(
+        project_root.list_handlers(),
+        vec![&env, handler.address.clone()]
+    );
 
-    assert_eq!(project_root.list_handlers(), soroban_sdk::vec![&env]);
+    // Only an explicit unregister removes it.
+    project_root.unregister_handler(&handler.address);
+    assert_eq!(project_root.list_handlers(), vec![&env]);
+}
+
+#[test]
+fn register_and_unregister_emit_events() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, handler, _admin) = deploy_with_handler(&env);
+    let empty_data: Val = Map::<Symbol, Val>::new(&env).into_val(&env);
+    let registered = (
+        project_root.address.clone(),
+        (
+            Symbol::new(&env, "handler_registered"),
+            handler.address.clone(),
+        )
+            .into_val(&env),
+        empty_data,
+    );
+    let removed = (
+        project_root.address.clone(),
+        (
+            Symbol::new(&env, "handler_removed"),
+            handler.address.clone(),
+        )
+            .into_val(&env),
+        empty_data,
+    );
+
+    // `env.events().all()` reflects the most recent invocation, so each call's
+    // events are asserted right after it.
+
+    // register → exactly one HandlerRegistered from project_root.
+    project_root.register_handler(&handler.address);
+    assert_eq!(
+        env.events().all().filter_by_contract(&project_root.address),
+        vec![&env, registered]
+    );
+
+    // unregister → exactly one HandlerRemoved.
+    project_root.unregister_handler(&handler.address);
+    assert_eq!(
+        env.events().all().filter_by_contract(&project_root.address),
+        vec![&env, removed]
+    );
+
+    // Re-unregistering an absent handler is a silent no-op — no event emitted.
+    project_root.unregister_handler(&handler.address);
+    assert_eq!(
+        env.events().all().filter_by_contract(&project_root.address),
+        vec![&env]
+    );
 }
 
 #[test]

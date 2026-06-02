@@ -90,8 +90,8 @@ async fn run(cli: Cli) -> Result<()> {
                 NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
-            register_handler(&env, &account, &manifest, retry_cfg).await?;
-            println!("registered handler with project_root");
+            let hash = register_handler(&env, &account, &manifest, retry_cfg).await?;
+            println!("{hash}");
         }
 
         Command::ListHandlers(args) => {

@@ -25,7 +25,9 @@ use wasi_soroban_rs::{
 
 use warpdrive_deployer::deploy::contract_scval;
 use warpdrive_deployer::error::DeployerError;
-use warpdrive_deployer::governance::{Target, accept_contract_admin, propose_admin};
+use warpdrive_deployer::governance::{
+    Target, accept_contract_admin, propose_admin, register_handler,
+};
 use warpdrive_deployer::manifest::{StellarDeployManifest, Variant};
 use warpdrive_deployer::project_root::{get_project_spec_repo, list_handlers};
 use warpdrive_deployer::retry::RetryConfig;
@@ -262,6 +264,29 @@ async fn set_threshold_drives_execute_through_mock() {
     )
     .await;
     assert!(res.is_ok(), "execute should succeed via the mock: {res:?}");
+}
+
+#[tokio::test]
+async fn register_handler_drives_execute_through_mock() {
+    // register_handler is a single admin write to project_root's register_handler.
+    let (env, account) = env_for_call(sim_for_execute(), true);
+    let mut m = manifest(Variant::Ethereum);
+    m.contracts.ethereum_handler = Some(cid(9));
+
+    let res = register_handler(&env, &account, &m, no_retry()).await;
+    assert!(
+        res.is_ok(),
+        "register_handler execute should succeed: {res:?}"
+    );
+}
+
+#[tokio::test]
+async fn register_handler_errors_when_handler_absent() {
+    // No handler slot in the manifest → guard error before any RPC call.
+    let env = mock_env(None, None, None);
+    let m = manifest(Variant::Ethereum); // project_root set, no handler
+    let res = register_handler(&env, &account(), &m, no_retry()).await;
+    assert!(matches!(res, Err(DeployerError::Manifest(_))), "{res:?}");
 }
 
 #[tokio::test]

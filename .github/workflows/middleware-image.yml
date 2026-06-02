@@ -9,8 +9,6 @@ on:
     paths:
       - "docker/middleware/**"
       - "packages/deployer/**"
-      - "packages/client/**"
-      - "contracts/**"
       - ".github/workflows/middleware-image.yml"
 
 env:

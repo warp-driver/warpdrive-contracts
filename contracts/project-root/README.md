@@ -53,6 +53,8 @@ The full interface is defined in [`ProjectRootInterface`](../../packages/shared/
 | Function | Description |
 |----------|-------------|
 | `update_project_spec_repo(repo)` | Update the URL/CID of the project specification. Admin-only. Emits `UpdatedSpecRepo`. |
+| `register_handler(handler)` | Track `handler` in the project's handler set. Admin-only. `handler` must report this project's verification contract. Idempotent. Emits `HandlerRegistered`. The canonical way to track a handler deployed with project_root already as its admin. |
+| `unregister_handler(handler)` | Remove `handler` from the tracked set. Admin-only. Idempotent. Emits `HandlerRemoved`. The only way a handler leaves the set — rotating its admin away does not untrack it. |
 | `upgrade(new_wasm_hash, new_version)` | Upgrade the contract WASM. Admin-only. Emits `ContractUpgraded`. |
 | `propose_admin(new_admin)` | Propose a new admin (two-step transfer). Current admin only. Emits `AdminProposed`. |
 | `accept_admin()` | Accept a pending admin transfer. Pending admin only. Emits `AdminAccepted`. |
@@ -65,7 +67,7 @@ The full interface is defined in [`ProjectRootInterface`](../../packages/shared/
 | `verification_contract() -> Address` | Address of the linked Verification contract. |
 | `project_spec_repo() -> String` | Current URL/CID of the project specification. |
 | `verification_type() -> VerificationType` | Which pipeline variant (`Ethereum` or `Stellar`) the linked contracts implement. |
-| `list_handlers() -> Vec<Address>` | Handler contracts this project governs. A handler joins the set when project_root accepts its admin via `accept_contract_admin` and drops out when its admin is rotated away via `propose_contract_admin`. |
+| `list_handlers() -> Vec<Address>` | Handler contracts this project tracks. A handler joins the set via `register_handler` (or implicitly when its admin is taken over by `accept_contract_admin`) and leaves only via `unregister_handler`. |
 | `admin() -> Address` | Current admin address. |
 | `pending_admin() -> Option<Address>` | Pending admin, if a transfer is in progress. |
 | `version() -> String` | Current contract version. |
@@ -81,6 +83,8 @@ Defined in [`packages/shared/src/interfaces/project_root.rs`](../../packages/sha
 | Event | Topic | Data Fields | Emitted By |
 |-------|-------|-------------|------------|
 | `UpdatedSpecRepo` | -- | `repo: String` | `update_project_spec_repo` |
+| `HandlerRegistered` | `handler: Address` | -- | `register_handler`, `accept_contract_admin` (handler) |
+| `HandlerRemoved` | `handler: Address` | -- | `unregister_handler` |
 | `ContractUpgraded` | -- | `version: String` | `upgrade` |
 | `AdminProposed` | -- | `old_admin: Address`, `new_admin: Address` | `propose_admin` |
 | `AdminAccepted` | -- | `new_admin: Address` | `accept_admin` |

@@ -145,6 +145,28 @@ impl ProjectRootClient {
         execute(&mut self.client_configs, "accept_contract_admin", args).await
     }
 
+    // ── Handler set management ──────────────────────────────────────────
+
+    /// Track `handler` in project_root's handler set. Admin write. The handler
+    /// must report project_root's verification contract. Idempotent on-chain.
+    pub async fn register_handler(
+        &mut self,
+        handler: ContractId,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![contract_address(handler)];
+        execute(&mut self.client_configs, "register_handler", args).await
+    }
+
+    /// Remove `handler` from project_root's handler set. Admin write.
+    /// Idempotent on-chain (a no-op if it wasn't tracked).
+    pub async fn unregister_handler(
+        &mut self,
+        handler: ContractId,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![contract_address(handler)];
+        execute(&mut self.client_configs, "unregister_handler", args).await
+    }
+
     pub async fn security_contract(&self) -> Result<ContractId, SorobanHelperError> {
         let res = query(&self.client_configs, "security_contract", vec![]).await?;
         if let ScVal::Address(ScAddress::Contract(XdrContractId(Hash(bytes)))) = res {

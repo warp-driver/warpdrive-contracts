@@ -4,7 +4,8 @@ use soroban_sdk::{
 
 use warpdrive_shared::interfaces::{
     project_root::{
-        ContractType, Forwarded, ProjectRootError, ProjectRootInterface, UpdatedSpecRepo,
+        ContractType, Forwarded, HandlerRegistered, HandlerRemoved, ProjectRootError,
+        ProjectRootInterface, UpdatedSpecRepo,
     },
     security::SecurityError,
     warpdrive::{ContractUpgraded, WarpDriveInterface},
@@ -221,14 +222,13 @@ impl ProjectRootInterface for ProjectRoot {
         target: Address,
         new_admin: Address,
     ) -> Result<(), ProjectRootError> {
-        let ctype = Self::ensure_our_contract(&env, &target)?;
+        Self::ensure_our_contract(&env, &target)?;
         let function = Symbol::new(&env, "propose_admin");
         let args = vec![&env, new_admin.to_val()];
         Self::proxy(&env, &target, function, args)?;
-        // If we take our own handler and change the admin away, it is no longer ours
-        if matches!(ctype, ContractType::Handler) {
-            storage::remove_handler(&env, &target);
-        }
+        // Rotating a handler's admin away does NOT untrack it — membership is
+        // managed explicitly via unregister_handler so the set never drifts on
+        // a propose that the new admin may never accept.
         Ok(())
     }
 
@@ -237,10 +237,34 @@ impl ProjectRootInterface for ProjectRoot {
         let function = Symbol::new(&env, "accept_admin");
         let args = vec![&env];
         Self::proxy(&env, &target, function, args)?;
-        // If we accept admin for a new handler, store it as ours
-        if matches!(ctype, ContractType::Handler) {
-            storage::add_handler(&env, &target);
+        // Taking over a handler's admin also tracks it as ours.
+        if matches!(ctype, ContractType::Handler) && storage::add_handler(&env, &target) {
+            HandlerRegistered::new(target).publish(&env);
         }
         Ok(())
+    }
+
+    fn register_handler(env: Env, handler: Address) -> Result<(), ProjectRootError> {
+        storage::get_admin(&env).require_auth();
+        // Only a handler reporting our verification contract can be tracked.
+        match Self::ensure_our_contract(&env, &handler)? {
+            ContractType::Handler => {}
+            ContractType::Security | ContractType::Verification => {
+                return Err(ProjectRootError::NotAHandler);
+            }
+        }
+        storage::extend_instance_ttl(&env);
+        if storage::add_handler(&env, &handler) {
+            HandlerRegistered::new(handler).publish(&env);
+        }
+        Ok(())
+    }
+
+    fn unregister_handler(env: Env, handler: Address) {
+        storage::get_admin(&env).require_auth();
+        storage::extend_instance_ttl(&env);
+        if storage::remove_handler(&env, &handler) {
+            HandlerRemoved::new(handler).publish(&env);
+        }
     }
 }
