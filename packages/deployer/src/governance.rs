@@ -12,16 +12,21 @@ use std::str::FromStr;
 
 use warpdrive_client::ed25519_security::Ed25519SecurityClient;
 use warpdrive_client::ed25519_verification::Ed25519VerificationClient;
+use warpdrive_client::ethereum_handler::EthereumHandlerClient;
 use warpdrive_client::project_root::ProjectRootClient;
 use warpdrive_client::secp256k1_security::Secp256k1SecurityClient;
 use warpdrive_client::secp256k1_verification::Secp256k1VerificationClient;
+use warpdrive_client::stellar_handler::StellarHandlerClient;
 use warpdrive_client::warpdrive::WarpdriveClient;
 use wasi_soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress};
 use wasi_soroban_rs::{Account, ContractId, Env};
 
 use crate::config::client_configs;
 use crate::error::{DeployerError, Result};
-use crate::manifest::{StellarDeployManifest, Variant, require_project_root, require_security};
+use crate::manifest::{
+    StellarDeployManifest, Variant, require_handler, require_project_root, require_security,
+    require_verification,
+};
 use crate::retry::{RetryConfig, retry};
 use crate::tx_hash;
 
@@ -30,6 +35,7 @@ use crate::tx_hash;
 pub enum Target {
     Security,
     Verification,
+    Handler,
     ProjectRoot,
 }
 
@@ -38,6 +44,7 @@ impl std::fmt::Display for Target {
         match self {
             Target::Security => f.write_str("security"),
             Target::Verification => f.write_str("verification"),
+            Target::Handler => f.write_str("handler"),
             Target::ProjectRoot => f.write_str("project-root"),
         }
     }
@@ -47,12 +54,8 @@ impl std::fmt::Display for Target {
 fn target_id(m: &StellarDeployManifest, target: Target) -> Result<ContractId> {
     match target {
         Target::Security => require_security(m),
-        Target::Verification => m.verification().ok_or_else(|| {
-            DeployerError::Manifest(format!(
-                "{} verification contract not present in manifest",
-                m.variant
-            ))
-        }),
+        Target::Verification => require_verification(m),
+        Target::Handler => require_handler(m),
         Target::ProjectRoot => require_project_root(m),
     }
 }
@@ -72,6 +75,8 @@ enum AnyClient {
     EdSecurity(Ed25519SecurityClient),
     SecpVerification(Secp256k1VerificationClient),
     EdVerification(Ed25519VerificationClient),
+    EthHandler(EthereumHandlerClient),
+    XlmHandler(StellarHandlerClient),
     ProjectRoot(ProjectRootClient),
 }
 
@@ -82,6 +87,8 @@ macro_rules! dispatch {
             AnyClient::EdSecurity($c) => $body,
             AnyClient::SecpVerification($c) => $body,
             AnyClient::EdVerification($c) => $body,
+            AnyClient::EthHandler($c) => $body,
+            AnyClient::XlmHandler($c) => $body,
             AnyClient::ProjectRoot($c) => $body,
         }
     };
@@ -107,6 +114,12 @@ impl AnyClient {
             }
             (Target::Verification, Variant::Stellar) => {
                 AnyClient::EdVerification(Ed25519VerificationClient::new(cfg))
+            }
+            (Target::Handler, Variant::Ethereum) => {
+                AnyClient::EthHandler(EthereumHandlerClient::new(cfg))
+            }
+            (Target::Handler, Variant::Stellar) => {
+                AnyClient::XlmHandler(StellarHandlerClient::new(cfg))
             }
             (Target::ProjectRoot, _) => AnyClient::ProjectRoot(ProjectRootClient::new(cfg)),
         })
@@ -179,10 +192,11 @@ pub async fn accept_contract_admin(
     retry_cfg: RetryConfig,
 ) -> Result<String> {
     let downstream = match target {
-        Target::Security | Target::Verification => target_id(m, target)?,
+        Target::Security | Target::Verification | Target::Handler => target_id(m, target)?,
         Target::ProjectRoot => {
             return Err(DeployerError::InvalidArgument(
-                "accept-contract-admin target must be security or verification".to_string(),
+                "accept-contract-admin target must be security, verification or handler"
+                    .to_string(),
             ));
         }
     };
@@ -250,6 +264,51 @@ pub async fn handover(
     eprintln!("=== proposing {owner} as admin of project_root ===");
     propose_admin(env, account, m, Target::ProjectRoot, owner, retry_cfg).await?;
     eprintln!("handover proposed; owner must now run `accept-admin --target project-root`");
+    Ok(())
+}
+
+/// `register-handler` (composite): hand the deployed handler's admin to
+/// project_root via the propose/accept dance, so it joins project_root's
+/// tracked handler set (surfaced by `list-handlers`). The handler must already
+/// be deployed (`deploy-handler`). Signed by the deployer, who is both the
+/// handler's admin and project_root's admin pre-handover. Idempotent via an
+/// `admin()`/`pending_admin()` read, so a re-run resumes.
+pub async fn register_handler(
+    env: &Env,
+    account: &Account,
+    m: &StellarDeployManifest,
+    retry_cfg: RetryConfig,
+) -> Result<()> {
+    let project_root = require_project_root(m)?;
+    let pr_addr = contract_scaddress(project_root);
+    let project_root_str = project_root.to_string();
+    // Surface a clear error before any network call if no handler is deployed.
+    require_handler(m)?;
+
+    let current = AnyClient::build(env, account, m, Target::Handler)?
+        .admin()
+        .await?;
+    if current == pr_addr {
+        eprintln!("=== handler already owned by project_root ===");
+        return Ok(());
+    }
+    let pending = AnyClient::build(env, account, m, Target::Handler)?
+        .pending_admin()
+        .await?;
+    if pending.as_ref() != Some(&pr_addr) {
+        eprintln!("=== proposing project_root as admin of handler ===");
+        propose_admin(
+            env,
+            account,
+            m,
+            Target::Handler,
+            &project_root_str,
+            retry_cfg,
+        )
+        .await?;
+    }
+    eprintln!("=== project_root accepting admin of handler (registers it) ===");
+    accept_contract_admin(env, account, m, Target::Handler, retry_cfg).await?;
     Ok(())
 }
 

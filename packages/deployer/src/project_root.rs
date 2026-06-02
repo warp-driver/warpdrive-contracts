@@ -1,7 +1,7 @@
 //! Project-root operations: read/update the `project_spec_repo` URL.
 
 use warpdrive_client::project_root::ProjectRootClient;
-use wasi_soroban_rs::{Account, Env};
+use wasi_soroban_rs::{Account, ContractId, Env};
 
 use crate::config::client_configs;
 use crate::error::{DeployerError, Result};
@@ -19,6 +19,22 @@ pub async fn get_project_spec_repo(
     let configs = client_configs(env, account, project_root);
     ProjectRootClient::new(configs)
         .project_spec_repo()
+        .await
+        .map_err(DeployerError::from)
+}
+
+/// `list-handlers`: read the handler contracts project_root currently governs
+/// (simulation only). Returns an empty list until a handler is registered via
+/// `register-handler`.
+pub async fn list_handlers(
+    env: &Env,
+    account: &Account,
+    manifest: &StellarDeployManifest,
+) -> Result<Vec<ContractId>> {
+    let project_root = require_project_root(manifest)?;
+    let configs = client_configs(env, account, project_root);
+    ProjectRootClient::new(configs)
+        .list_handlers()
         .await
         .map_err(DeployerError::from)
 }

@@ -531,6 +531,101 @@ fn typed_helper_uses_rotated_admin() {
     assert_eq!(security.get_signer_weight(&key), weight);
 }
 
+// ── list_handlers tracking ─────────────────────────────────────────────
+
+/// Build project_root with a real ed25519 verification contract plus a Stellar
+/// handler pointing back at it (admin still the EoA). Returns the pieces the
+/// handler-tracking tests need.
+fn deploy_with_handler<'a>(
+    env: &Env,
+) -> (
+    ProjectRootClient<'a>,
+    warpdrive_stellar_handler::StellarHandlerClient<'a>,
+    Address,
+) {
+    use warpdrive_ed25519_verification::Ed25519Verification;
+    use warpdrive_stellar_handler::{StellarHandler, StellarHandlerClient};
+
+    let admin = Address::generate(env);
+    let repo = String::from_str(env, "https://github.com/example/spec");
+    let security_id = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let verification_id = env.register(Ed25519Verification, (&admin, &security_id));
+    let project_root_id = env.register(
+        ProjectRoot,
+        (
+            &admin,
+            &security_id,
+            &verification_id,
+            &repo,
+            VerificationType::Stellar,
+        ),
+    );
+    let project_root = ProjectRootClient::new(env, &project_root_id);
+
+    let handler_id = env.register(StellarHandler, (&admin, &verification_id));
+    let handler = StellarHandlerClient::new(env, &handler_id);
+
+    (project_root, handler, admin)
+}
+
+#[test]
+fn list_handlers_is_empty_before_any_registration() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, _security, _admin) = deploy_proxy_with_registered_security(&env);
+    assert_eq!(project_root.list_handlers(), soroban_sdk::vec![&env]);
+}
+
+#[test]
+fn accept_contract_admin_tracks_handler_in_list() {
+    // Accepting a handler's admin (the handover dance a deploy script runs)
+    // records it in the tracked handler set surfaced by list_handlers.
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, handler, _admin) = deploy_with_handler(&env);
+    assert_eq!(project_root.list_handlers(), soroban_sdk::vec![&env]);
+
+    // Handler proposes project_root, project_root accepts on its own behalf.
+    handler.propose_admin(&project_root.address);
+    project_root.accept_contract_admin(&handler.address);
+    assert_eq!(handler.admin(), project_root.address);
+
+    assert_eq!(
+        project_root.list_handlers(),
+        soroban_sdk::vec![&env, handler.address.clone()]
+    );
+
+    // Re-accepting the same handler is idempotent — no duplicate entry.
+    handler.propose_admin(&project_root.address);
+    project_root.accept_contract_admin(&handler.address);
+    assert_eq!(
+        project_root.list_handlers(),
+        soroban_sdk::vec![&env, handler.address]
+    );
+}
+
+#[test]
+fn propose_contract_admin_untracks_handler_from_list() {
+    // Rotating a tracked handler's admin away drops it from list_handlers.
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, handler, _admin) = deploy_with_handler(&env);
+    handler.propose_admin(&project_root.address);
+    project_root.accept_contract_admin(&handler.address);
+    assert_eq!(
+        project_root.list_handlers(),
+        soroban_sdk::vec![&env, handler.address.clone()]
+    );
+
+    let next_admin = Address::generate(&env);
+    project_root.propose_contract_admin(&handler.address, &next_admin);
+
+    assert_eq!(project_root.list_handlers(), soroban_sdk::vec![&env]);
+}
+
 #[test]
 fn propose_contract_admin_rejects_targeting_project_root_itself() {
     // Pointing the admin forwarder back at project_root is rejected before

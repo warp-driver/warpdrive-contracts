@@ -262,6 +262,26 @@ fn deployer_has_no_remaining_privileges_after_handover() {
     assert_eq!(d.security.get_signer_weight(&new_signer), 0);
 }
 
+#[test]
+fn handler_is_tracked_in_list_after_handover() {
+    // Step 4 of the deploy script accepts the handler's admin via
+    // accept_contract_admin, which registers it in project_root's handler set.
+    // list_handlers must surface it (and only it).
+    let env = Env::default();
+    let d = run_deployment_script(&env);
+
+    assert_eq!(
+        d.project_root.list_handlers(),
+        soroban_sdk::vec![&env, d.handler.address.clone()]
+    );
+
+    // Security and verification are governed but are NOT handlers, so they
+    // never appear in the handler set.
+    let handlers = d.project_root.list_handlers();
+    assert!(!handlers.contains(&d.security.address));
+    assert!(!handlers.contains(&d.verification.address));
+}
+
 // ── Owner exercises governance through project_root ────────────────────
 
 #[test]

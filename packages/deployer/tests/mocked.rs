@@ -15,7 +15,7 @@ use wasi_soroban_rs::wasi_stellar_rpc_client::{
     SimulateHostFunctionResultRaw, SimulateTransactionResponse,
 };
 use wasi_soroban_rs::xdr::{
-    LedgerFootprint, Limits, ScVal, SorobanResources, SorobanTransactionData,
+    LedgerFootprint, Limits, ScVal, ScVec, SorobanResources, SorobanTransactionData,
     SorobanTransactionDataExt, VecM, WriteXdr,
 };
 use wasi_soroban_rs::{
@@ -23,10 +23,11 @@ use wasi_soroban_rs::{
     mock_transaction_response,
 };
 
+use warpdrive_deployer::deploy::contract_scval;
 use warpdrive_deployer::error::DeployerError;
 use warpdrive_deployer::governance::{Target, accept_contract_admin, propose_admin};
 use warpdrive_deployer::manifest::{StellarDeployManifest, Variant};
-use warpdrive_deployer::project_root::get_project_spec_repo;
+use warpdrive_deployer::project_root::{get_project_spec_repo, list_handlers};
 use warpdrive_deployer::retry::RetryConfig;
 use warpdrive_deployer::signers::{Scheme, add_signer, set_threshold};
 
@@ -214,6 +215,35 @@ async fn get_project_spec_repo_decodes_simulation_result() {
     let m = manifest(Variant::Ethereum);
     let repo = get_project_spec_repo(&env, &account, &m).await.unwrap();
     assert_eq!(repo, "ipfs://demo");
+}
+
+#[tokio::test]
+async fn list_handlers_decodes_simulation_result() {
+    // Two contract addresses returned as a Vec, decoded to ContractIds.
+    let handlers = ScVal::Vec(Some(ScVec(
+        VecM::try_from(vec![
+            contract_scval(ContractId([0xAB; 32])),
+            contract_scval(ContractId([0xCD; 32])),
+        ])
+        .unwrap(),
+    )));
+    let (env, account) = env_for_call(sim_returning(handlers), false);
+    let m = manifest(Variant::Ethereum);
+
+    let result = list_handlers(&env, &account, &m).await.unwrap();
+    assert_eq!(result, vec![ContractId([0xAB; 32]), ContractId([0xCD; 32])]);
+}
+
+#[tokio::test]
+async fn list_handlers_decodes_empty_vec() {
+    let (env, account) = env_for_call(
+        sim_returning(ScVal::Vec(Some(ScVec(VecM::default())))),
+        false,
+    );
+    let m = manifest(Variant::Ethereum);
+
+    let result = list_handlers(&env, &account, &m).await.unwrap();
+    assert!(result.is_empty());
 }
 
 #[tokio::test]

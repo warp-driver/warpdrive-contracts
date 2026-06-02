@@ -18,7 +18,7 @@ The Project Root itself is identical for both variants -- only the addresses it 
 | File | Purpose |
 |------|---------|
 | [`src/contract.rs`](./src/contract.rs) | Implements `ProjectRootInterface` and `WarpDriveInterface`; constructor wires admin + linked contracts + spec repo + verification type |
-| [`src/storage.rs`](./src/storage.rs) | Persistent storage for admin, security/verification contract addresses, spec repo string, and verification type |
+| [`src/storage.rs`](./src/storage.rs) | Persistent storage for admin, security/verification contract addresses, spec repo string, verification type, and the tracked handler set |
 | [`src/lib.rs`](./src/lib.rs) | Crate root and module wiring |
 
 ## Contract Interactions
@@ -65,6 +65,7 @@ The full interface is defined in [`ProjectRootInterface`](../../packages/shared/
 | `verification_contract() -> Address` | Address of the linked Verification contract. |
 | `project_spec_repo() -> String` | Current URL/CID of the project specification. |
 | `verification_type() -> VerificationType` | Which pipeline variant (`Ethereum` or `Stellar`) the linked contracts implement. |
+| `list_handlers() -> Vec<Address>` | Handler contracts this project governs. A handler joins the set when project_root accepts its admin via `accept_contract_admin` and drops out when its admin is rotated away via `propose_contract_admin`. |
 | `admin() -> Address` | Current admin address. |
 | `pending_admin() -> Option<Address>` | Pending admin, if a transfer is in progress. |
 | `version() -> String` | Current contract version. |

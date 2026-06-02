@@ -1,7 +1,9 @@
-//! Idempotent deploy pipeline. Mirrors `deploy.sh`: deploys the variant's
-//! security + verification contracts and project_root (no handlers — docker
-//! parity, PLAN.md §2), checkpointing the manifest after each step so a
-//! mid-run abort + re-run resumes exactly where it stopped.
+//! Idempotent deploy pipeline. `deploy_pipeline` mirrors `deploy.sh`: deploys
+//! the variant's security + verification contracts and project_root,
+//! checkpointing the manifest after each step so a mid-run abort + re-run
+//! resumes exactly where it stopped. Handlers are deployed separately by
+//! `deploy_handler` (then governed via `governance::register_handler`), so a
+//! plain `deploy` keeps docker parity (PLAN.md §2).
 
 use std::path::{Path, PathBuf};
 
@@ -11,7 +13,7 @@ use wasi_soroban_rs::{Account, Contract, ContractId, Env, IntoScVal};
 
 use crate::config::NetworkConfig;
 use crate::error::{DeployerError, Result};
-use crate::manifest::{StellarDeployManifest, Variant};
+use crate::manifest::{StellarDeployManifest, Variant, require_verification};
 use crate::retry::{RetryConfig, retry};
 
 // Wasm filenames, resolved against `--wasm-dir`.
@@ -20,6 +22,8 @@ const SECP_VERIFICATION_WASM: &str = "warpdrive_secp256k1_verification.wasm";
 const ED_SECURITY_WASM: &str = "warpdrive_ed25519_security.wasm";
 const ED_VERIFICATION_WASM: &str = "warpdrive_ed25519_verification.wasm";
 const PROJECT_ROOT_WASM: &str = "warpdrive_project_root.wasm";
+const ETHEREUM_HANDLER_WASM: &str = "warpdrive_ethereum_handler.wasm";
+const STELLAR_HANDLER_WASM: &str = "warpdrive_stellar_handler.wasm";
 
 pub const DEFAULT_PROJECT_SPEC_REPO: &str = "ipfs://REPLACE_ME";
 pub const DEFAULT_THRESHOLD: (u64, u64) = (2, 3);
@@ -57,6 +61,11 @@ pub fn verification_ctor_args(admin: ScVal, security: ContractId) -> Vec<ScVal> 
     vec![admin, contract_scval(security)]
 }
 
+/// handler: `[admin, verification_addr]`
+pub fn handler_ctor_args(admin: ScVal, verification: ContractId) -> Vec<ScVal> {
+    vec![admin, contract_scval(verification)]
+}
+
 /// project_root: `[admin, security_addr, verification_addr, repo, vtype]`
 pub fn project_root_ctor_args(
     admin: ScVal,
@@ -87,6 +96,20 @@ fn verification_wasm(variant: Variant) -> &'static str {
     match variant {
         Variant::Ethereum => SECP_VERIFICATION_WASM,
         Variant::Stellar => ED_VERIFICATION_WASM,
+    }
+}
+
+fn handler_wasm(variant: Variant) -> &'static str {
+    match variant {
+        Variant::Ethereum => ETHEREUM_HANDLER_WASM,
+        Variant::Stellar => STELLAR_HANDLER_WASM,
+    }
+}
+
+fn set_handler(m: &mut StellarDeployManifest, id: ContractId) {
+    match m.variant {
+        Variant::Ethereum => m.contracts.ethereum_handler = Some(id),
+        Variant::Stellar => m.contracts.stellar_handler = Some(id),
     }
 }
 
@@ -142,14 +165,17 @@ async fn deploy_one(
 
 /// Run the idempotent deploy. Loads `manifest_path` if present (resume), skips
 /// already-deployed slots, and persists after each successful deploy.
+///
+/// `env` does the deploys (passed in so tests can inject `mock_env`); `net`
+/// carries the rpc_url / passphrase recorded in the manifest metadata.
 pub async fn deploy_pipeline(
+    env: &Env,
     net: &NetworkConfig,
     account: &Account,
     params: &DeployParams,
     manifest_path: &Path,
     retry_cfg: RetryConfig,
 ) -> Result<StellarDeployManifest> {
-    let env = net.env()?;
     let admin = account.account_id().to_string();
     let admin_addr = admin_scval(account);
 
@@ -182,7 +208,7 @@ pub async fn deploy_pipeline(
         None => {
             let (num, den) = params.threshold;
             let id = deploy_one(
-                &env,
+                env,
                 account,
                 &params.wasm_dir,
                 security_wasm(params.variant),
@@ -205,7 +231,7 @@ pub async fn deploy_pipeline(
         }
         None => {
             let id = deploy_one(
-                &env,
+                env,
                 account,
                 &params.wasm_dir,
                 verification_wasm(params.variant),
@@ -225,7 +251,7 @@ pub async fn deploy_pipeline(
         Some(id) => eprintln!("=== reusing project-root ({id}) ==="),
         None => {
             let id = deploy_one(
-                &env,
+                env,
                 account,
                 &params.wasm_dir,
                 PROJECT_ROOT_WASM,
@@ -246,5 +272,49 @@ pub async fn deploy_pipeline(
     }
 
     eprintln!("wrote deployment manifest to {}", manifest_path.display());
+    Ok(manifest)
+}
+
+/// `deploy-handler`: deploy the variant's handler contract (admin = the
+/// deployer, verification = the manifest's verification contract) and record it
+/// in the manifest's handler slot. Idempotent — a re-run reuses an
+/// already-deployed handler.
+///
+/// The pipeline must already be deployed: the verification contract is read
+/// from the manifest at `manifest_path`. Registering the handler with
+/// project_root (the propose/accept-admin dance) is a separate step —
+/// `governance::register_handler`.
+pub async fn deploy_handler(
+    env: &Env,
+    account: &Account,
+    wasm_dir: &Path,
+    manifest_path: &Path,
+    retry_cfg: RetryConfig,
+) -> Result<StellarDeployManifest> {
+    let mut manifest = StellarDeployManifest::load(manifest_path).map_err(DeployerError::from)?;
+
+    if let Some(id) = manifest.handler() {
+        eprintln!("=== reusing handler ({id}) ===");
+        return Ok(manifest);
+    }
+
+    let verification = require_verification(&manifest)?;
+    let id = deploy_one(
+        env,
+        account,
+        wasm_dir,
+        handler_wasm(manifest.variant),
+        handler_ctor_args(admin_scval(account), verification),
+        retry_cfg,
+        "handler",
+    )
+    .await?;
+    set_handler(&mut manifest, id);
+    manifest.persist(manifest_path)?;
+
+    eprintln!(
+        "wrote handler to deployment manifest at {}",
+        manifest_path.display()
+    );
     Ok(manifest)
 }

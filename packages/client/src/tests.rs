@@ -240,6 +240,42 @@ fn contract_address_decodes_to_client_contract_id() {
 }
 
 #[test]
+fn handler_vec_decodes_to_client_contract_ids() {
+    // `list_handlers` returns a soroban Vec<Address> of contract addresses;
+    // the client decodes it to Vec<ContractId>. Build the SDK-side value,
+    // bridge it to a client ScVal, and run the real decoder.
+    use crate::project_root::decode_handlers;
+    use soroban_sdk::Vec as SdkVec;
+    use wasi_soroban_rs::ContractId;
+
+    let env = Env::default();
+    let a = [0x11u8; 32];
+    let b = [0x22u8; 32];
+    let addr_a = Address::from_str(&env, &stellar_strkey::Contract(a).to_string());
+    let addr_b = Address::from_str(&env, &stellar_strkey::Contract(b).to_string());
+    let handlers = SdkVec::from_array(&env, [addr_a, addr_b]);
+
+    let sdk_scval = to_sdk_scval(&env, handlers);
+    let client_scval = from_sdk(&sdk_scval);
+
+    let decoded = decode_handlers(&client_scval).expect("decode handlers");
+    assert_eq!(decoded, vec![ContractId(a), ContractId(b)]);
+}
+
+#[test]
+fn empty_handler_vec_decodes_to_empty() {
+    use crate::project_root::decode_handlers;
+    use soroban_sdk::Vec as SdkVec;
+
+    let env = Env::default();
+    let empty: SdkVec<Address> = SdkVec::new(&env);
+    let sdk_scval = to_sdk_scval(&env, empty);
+    let client_scval = from_sdk(&sdk_scval);
+
+    assert!(decode_handlers(&client_scval).unwrap().is_empty());
+}
+
+#[test]
 fn account_address_decodes_to_client_account_id() {
     use wasi_soroban_rs::xdr::{AccountId, PublicKey, ScAddress, Uint256};
 

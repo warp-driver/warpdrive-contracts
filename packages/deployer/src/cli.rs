@@ -23,6 +23,14 @@ pub enum Command {
     /// Deploy a contract pipeline (security + verification + project-root) and
     /// write a JSON manifest. One pipeline per file; run twice for both.
     Deploy(DeployArgs),
+    /// Deploy the variant's handler contract and record it in the manifest.
+    /// Requires an already-deployed pipeline (reads its verification contract).
+    DeployHandler(DeployHandlerArgs),
+    /// Register a deployed handler with project_root (propose + accept admin),
+    /// so it appears in `list-handlers`.
+    RegisterHandler(RegisterHandlerArgs),
+    /// List the handler contracts project_root currently governs.
+    ListHandlers(ListHandlersArgs),
     /// Register or update a signer on the matching security contract.
     AddSigner(AddSignerArgs),
     /// Remove a signer from the matching security contract.
@@ -133,6 +141,43 @@ pub struct DeployArgs {
     /// Override project-root's verification_type (default: matches --variant).
     #[arg(long, value_enum)]
     pub verification_type: Option<VerificationTypeArg>,
+}
+
+#[derive(Debug, Args)]
+pub struct DeployHandlerArgs {
+    #[command(flatten)]
+    pub network: NetworkArgs,
+    #[command(flatten)]
+    pub identity: IdentityArgs,
+    #[command(flatten)]
+    pub deploy_file: DeployFileArg,
+    /// Directory holding the contract wasm (default: WASM_DIR or /warpdrive/wasm).
+    #[arg(long)]
+    pub wasm_dir: Option<PathBuf>,
+    /// Also register the handler with project_root after deploying (propose +
+    /// accept the admin handover so it shows up in `list-handlers`).
+    #[arg(long)]
+    pub register: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct RegisterHandlerArgs {
+    #[command(flatten)]
+    pub network: NetworkArgs,
+    #[command(flatten)]
+    pub identity: IdentityArgs,
+    #[command(flatten)]
+    pub deploy_file: DeployFileArg,
+}
+
+#[derive(Debug, Args)]
+pub struct ListHandlersArgs {
+    #[command(flatten)]
+    pub network: NetworkArgs,
+    #[command(flatten)]
+    pub identity: IdentityArgs,
+    #[command(flatten)]
+    pub deploy_file: DeployFileArg,
 }
 
 #[derive(Debug, Args)]

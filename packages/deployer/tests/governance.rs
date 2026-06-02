@@ -60,6 +60,7 @@ async fn handover_strips_deployer_privileges() {
     // Step 1-3: deploy + configure (add a signer directly, pre-handover).
     let manifest_path = dir.path().join("deploy.json");
     let manifest = deploy_pipeline(
+        &env,
         &net,
         &deployer,
         &DeployParams {

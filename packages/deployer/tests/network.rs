@@ -1,27 +1,37 @@
-//! End-to-end integration test against a live local Stellar Quickstart.
+//! End-to-end integration test against a live Stellar node.
 //!
-//! Opt-in: `#[ignore]`d so it never runs in the default `cargo test`. Run with:
+//! Opt-in: `#[ignore]`d so it never runs in the default `cargo test`. Prefer
+//! `task test-deployer-it`. The contracts target **protocol 26**, so this needs
+//! a protocol-26 RPC — testnet today. Local Stellar Quickstart (incl. the
+//! compose-pinned image) currently maxes at protocol 25, so its `--local` node
+//! rejects the wasm ("contract protocol number is newer than host"); the
+//! hermetic deploy coverage lives in `tests/deploy.rs` (mock_env) instead.
 //!
 //! ```bash
-//! RPC_URL=http://localhost:8000/rpc \
-//! NETWORK_PASSPHRASE="Standalone Network ; February 2017" \
-//! FRIENDBOT_URL=http://localhost:8000/friendbot \
+//! RPC_URL=https://soroban-testnet.stellar.org \
+//! NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
 //!   cargo test --test network -- --ignored --nocapture
 //! ```
 //!
-//! Walks the same flow the shell smoke test did: keygen → deploy (ethereum and
-//! stellar, two files) → add-signer → set-threshold → project-spec-repo
-//! get/set → get-ledger.
+//! Walks the same flow the shell smoke test did, extended with handler
+//! governance: keygen → deploy (ethereum and stellar, two files) → add-signer →
+//! set-threshold → project-spec-repo get/set → deploy-handler →
+//! register-handler → list-handlers (asserts the handler shows up) → get-ledger.
 
 use std::path::PathBuf;
 
 use warpdrive_client::project_root::VerificationType;
 use warpdrive_deployer::config::NetworkConfig;
-use warpdrive_deployer::deploy::{DEFAULT_PROJECT_SPEC_REPO, DeployParams, deploy_pipeline};
+use warpdrive_deployer::deploy::{
+    DEFAULT_PROJECT_SPEC_REPO, DeployParams, deploy_handler, deploy_pipeline,
+};
+use warpdrive_deployer::governance::register_handler;
 use warpdrive_deployer::identity::{account_from_secret, keygen_and_fund, read_key_file};
 use warpdrive_deployer::ledger::get_latest_ledger;
 use warpdrive_deployer::manifest::Variant;
-use warpdrive_deployer::project_root::{get_project_spec_repo, set_project_spec_repo};
+use warpdrive_deployer::project_root::{
+    get_project_spec_repo, list_handlers, set_project_spec_repo,
+};
 use warpdrive_deployer::retry::RetryConfig;
 use warpdrive_deployer::signers::{Scheme, add_signer, set_threshold};
 
@@ -52,6 +62,7 @@ async fn full_pipeline() {
     let xlm_path: PathBuf = dir.path().join("deploy-stellar.json");
 
     let eth_manifest = deploy_pipeline(
+        &env,
         &net,
         &account,
         &DeployParams {
@@ -69,6 +80,7 @@ async fn full_pipeline() {
     assert!(eth_manifest.project_root().is_some());
 
     let _xlm_manifest = deploy_pipeline(
+        &env,
         &net,
         &account,
         &DeployParams {
@@ -126,6 +138,29 @@ async fn full_pipeline() {
         .await
         .unwrap();
     assert_eq!(repo_after, "ipfs://updated");
+
+    // deploy-handler → register-handler → list-handlers. The deployer is still
+    // project_root's admin (no handover in this test), so it can run the
+    // propose/accept dance that registers the handler with project_root.
+    let eth_manifest = deploy_handler(&env, &account, &wasm_dir(), &eth_path, retry_cfg)
+        .await
+        .expect("deploy handler");
+    let handler = eth_manifest
+        .handler()
+        .expect("handler recorded in manifest");
+    eprintln!("handler: {handler}");
+
+    register_handler(&env, &account, &eth_manifest, retry_cfg)
+        .await
+        .expect("register handler with project_root");
+
+    let handlers = list_handlers(&env, &account, &eth_manifest)
+        .await
+        .expect("list handlers");
+    assert!(
+        handlers.contains(&handler),
+        "registered handler must appear in list_handlers (got {handlers:?})"
+    );
 
     // get-ledger.
     let seq = get_latest_ledger(&net.rpc_url).await.expect("get ledger");

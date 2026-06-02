@@ -136,6 +136,13 @@ mod manifest_impl {
         pub ed25519_security: Option<ContractId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub ed25519_verification: Option<ContractId>,
+        // Handler slots are populated by `deploy-handler`. They sit after the
+        // pipeline contracts and are omitted when unset, so a handler-free
+        // manifest is byte-identical to the shell deployer's output.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub ethereum_handler: Option<ContractId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub stellar_handler: Option<ContractId>,
     }
 
     /// A single deployed pipeline + project_root, read from / written to
@@ -183,6 +190,15 @@ mod manifest_impl {
             match self.variant {
                 Variant::Ethereum => self.contracts.secp256k1_verification,
                 Variant::Stellar => self.contracts.ed25519_verification,
+            }
+        }
+
+        /// The handler contract ID for this manifest's variant, if deployed
+        /// (`ethereum_handler` for ethereum, `stellar_handler` for stellar).
+        pub fn handler(&self) -> Option<ContractId> {
+            match self.variant {
+                Variant::Ethereum => self.contracts.ethereum_handler,
+                Variant::Stellar => self.contracts.stellar_handler,
             }
         }
 

@@ -1,5 +1,5 @@
 use soroban_sdk::{
-    Address, BytesN, Env, String, Symbol, contractclient, contracterror, contractevent,
+    Address, BytesN, Env, String, Symbol, Vec, contractclient, contracterror, contractevent,
     contracttype,
 };
 
@@ -155,4 +155,9 @@ pub trait ProjectRootInterface: WarpDriveInterface {
     fn project_spec_repo(env: Env) -> String;
     /// Returns which interface is used by security_contract and verification_contract
     fn verification_type(env: Env) -> VerificationType;
+    /// Returns the handler contracts this project currently governs. A handler
+    /// joins the set when project_root accepts its admin via
+    /// `accept_contract_admin`, and drops out when its admin is rotated away via
+    /// `propose_contract_admin`. Empty until the first handler is registered.
+    fn list_handlers(env: Env) -> Vec<Address>;
 }

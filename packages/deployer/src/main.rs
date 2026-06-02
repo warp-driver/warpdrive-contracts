@@ -8,16 +8,18 @@ use clap::Parser;
 use warpdrive_deployer::cli::{Cli, Command};
 use warpdrive_deployer::config::{NetworkConfig, resolve_wasm_dir};
 use warpdrive_deployer::deploy::{
-    DEFAULT_PROJECT_SPEC_REPO, DEFAULT_THRESHOLD, DeployParams, deploy_pipeline,
+    DEFAULT_PROJECT_SPEC_REPO, DEFAULT_THRESHOLD, DeployParams, deploy_handler, deploy_pipeline,
 };
 use warpdrive_deployer::error::Result;
 use warpdrive_deployer::governance::{
-    accept_admin, accept_contract_admin, handover, propose_admin,
+    accept_admin, accept_contract_admin, handover, propose_admin, register_handler,
 };
 use warpdrive_deployer::identity::{DEFAULT_KEY_FILE, keygen_and_fund, resolve_account};
 use warpdrive_deployer::ledger::get_latest_ledger;
 use warpdrive_deployer::manifest::{Variant, load as load_manifest};
-use warpdrive_deployer::project_root::{get_project_spec_repo, set_project_spec_repo};
+use warpdrive_deployer::project_root::{
+    get_project_spec_repo, list_handlers, set_project_spec_repo,
+};
 use warpdrive_deployer::retry::RetryConfig;
 use warpdrive_deployer::signers::{add_signer, remove_signer, set_threshold};
 
@@ -39,6 +41,7 @@ async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Deploy(args) => {
             let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env = net.env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let variant: Variant = args.variant.into();
             let params = DeployParams {
@@ -57,8 +60,49 @@ async fn run(cli: Cli) -> Result<()> {
                     .map(Into::into)
                     .unwrap_or_else(|| variant.default_verification_type()),
             };
-            deploy_pipeline(&net, &account, &params, &args.output_path, retry_cfg).await?;
+            deploy_pipeline(&env, &net, &account, &params, &args.output_path, retry_cfg).await?;
             println!("{}", args.output_path.display());
+        }
+
+        Command::DeployHandler(args) => {
+            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env = net.env()?;
+            let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
+            let wasm_dir = resolve_wasm_dir(args.wasm_dir);
+            let manifest = deploy_handler(
+                &env,
+                &account,
+                &wasm_dir,
+                &args.deploy_file.deploy_file,
+                retry_cfg,
+            )
+            .await?;
+            if args.register {
+                register_handler(&env, &account, &manifest, retry_cfg).await?;
+            }
+            if let Some(handler) = manifest.handler() {
+                println!("{handler}");
+            }
+        }
+
+        Command::RegisterHandler(args) => {
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
+            let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
+            let manifest = load_manifest(&args.deploy_file.deploy_file)?;
+            register_handler(&env, &account, &manifest, retry_cfg).await?;
+            println!("registered handler with project_root");
+        }
+
+        Command::ListHandlers(args) => {
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
+            let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
+            let manifest = load_manifest(&args.deploy_file.deploy_file)?;
+            let handlers = list_handlers(&env, &account, &manifest).await?;
+            for handler in handlers {
+                println!("{handler}");
+            }
         }
 
         Command::AddSigner(args) => {

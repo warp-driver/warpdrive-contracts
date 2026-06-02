@@ -30,3 +30,24 @@ pub fn require_security(m: &StellarDeployManifest) -> Result<ContractId> {
         ))
     })
 }
+
+/// The variant's verification contract ID, erroring if not present.
+pub fn require_verification(m: &StellarDeployManifest) -> Result<ContractId> {
+    m.verification().ok_or_else(|| {
+        DeployerError::Manifest(format!(
+            "{} verification contract not present in manifest",
+            m.variant
+        ))
+    })
+}
+
+/// The variant's handler contract ID, erroring if it hasn't been deployed yet
+/// (run `deploy-handler` first).
+pub fn require_handler(m: &StellarDeployManifest) -> Result<ContractId> {
+    m.handler().ok_or_else(|| {
+        DeployerError::Manifest(format!(
+            "{} handler contract not present in manifest; run `deploy-handler` first",
+            m.variant
+        ))
+    })
+}

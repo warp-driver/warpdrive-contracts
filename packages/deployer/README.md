@@ -39,6 +39,9 @@ unit-testable directly.
 ```text
 keygen                  # generate + friendbot-fund an identity keyfile
 deploy                  # deploy a pipeline (ethereum | stellar) + project-root
+deploy-handler          # deploy the variant's handler (+ optional --register)
+register-handler        # register a handler with project_root (propose+accept)
+list-handlers           # list the handlers project_root governs
 add-signer              # register/update a signer (--scheme secp256k1|ed25519)
 remove-signer           # drop a signer
 set-threshold           # set numerator/denominator
@@ -63,8 +66,31 @@ admin address is derived from the secret.
 
 The deploy manifest is one pipeline per file (no `--variant both`); run `deploy`
 twice into two files to provision both. The schema is byte-compatible with the
-old shell deployer's `deploy.json`. Handler contracts are not deployed (docker
-parity).
+old shell deployer's `deploy.json` for handler-free deployments — the optional
+`ethereum_handler` / `stellar_handler` slots are only written once you run
+`deploy-handler`, so a `deploy`-only manifest is unchanged.
+
+## Handlers
+
+`deploy` provisions only the pipeline (security + verification) and
+project-root. Handler contracts are deployed and governed separately:
+
+```bash
+# deploy the variant's handler and hand its admin to project_root in one shot
+warpdrive-deployer deploy-handler --deploy-file /out/deploy.json --register
+# (or run the steps individually)
+warpdrive-deployer deploy-handler   --deploy-file /out/deploy.json
+warpdrive-deployer register-handler --deploy-file /out/deploy.json
+# confirm it's tracked
+warpdrive-deployer list-handlers --deploy-file /out/deploy.json
+```
+
+`deploy-handler` deploys the variant's handler (admin = the deployer, pointing
+at the manifest's verification contract) and records it in the manifest.
+`register-handler` runs the propose/accept-admin dance so project_root becomes
+the handler's admin, which adds it to project_root's tracked set surfaced by
+`list-handlers`. Both are idempotent and must run while the deployer is still
+project_root's admin (i.e. before `handover`).
 
 ## Docker
 
