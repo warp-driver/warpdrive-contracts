@@ -42,15 +42,18 @@ pub fn resolve_wasm_dir(flag: Option<PathBuf>) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEFAULT_WASM_DIR))
 }
 
-/// Build the client config for invoking `contract_id` as `account`.
+/// Build the client config for invoking `contract_id` as `account` against a
+/// pre-built `Env`. Taking `&Env` (rather than rebuilding it from a
+/// `NetworkConfig` here) is what lets the typed fns be driven by
+/// `wasi_soroban_rs::mock_env` in unit tests.
 pub fn client_configs(
-    net: &NetworkConfig,
+    env: &Env,
     account: &Account,
     contract_id: ContractId,
-) -> Result<ClientContractConfigs> {
-    Ok(ClientContractConfigs {
+) -> ClientContractConfigs {
+    ClientContractConfigs {
         contract_id,
-        env: net.env()?,
+        env: env.clone(),
         source_account: account.clone(),
-    })
+    }
 }

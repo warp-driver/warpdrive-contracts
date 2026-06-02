@@ -17,10 +17,10 @@ use warpdrive_client::ed25519_security::Ed25519SecurityClient;
 use warpdrive_client::project_root::ProjectRootClient;
 use warpdrive_client::secp256k1_security::Secp256k1SecurityClient;
 use wasi_soroban_rs::{
-    Account, ClientContractConfigs, ContractId, SorobanHelperError, SorobanTransactionResponse,
+    Account, ClientContractConfigs, ContractId, Env, SorobanHelperError, SorobanTransactionResponse,
 };
 
-use crate::config::{NetworkConfig, client_configs};
+use crate::config::client_configs;
 use crate::error::{DeployerError, Result};
 use crate::manifest::{StellarDeployManifest, Variant, require_project_root, require_security};
 use crate::retry::{RetryConfig, retry};
@@ -197,7 +197,7 @@ impl SecurityClient {
 /// selects the post-handover forwarder path.
 #[allow(clippy::too_many_arguments)] // independent CLI params; bundling would obscure
 pub async fn add_signer(
-    net: &NetworkConfig,
+    env: &Env,
     account: &Account,
     manifest: &StellarDeployManifest,
     scheme: Scheme,
@@ -208,7 +208,7 @@ pub async fn add_signer(
 ) -> Result<String> {
     let target = signer_target(manifest, scheme, via_project_root)?;
     let key = parse_key(scheme, key_hex)?;
-    let configs = client_configs(net, account, target)?;
+    let configs = client_configs(env, account, target);
 
     let resp = retry(retry_cfg, || {
         let configs = configs.clone();
@@ -226,7 +226,7 @@ pub async fn add_signer(
 
 /// `remove-signer`: drop a signer.
 pub async fn remove_signer(
-    net: &NetworkConfig,
+    env: &Env,
     account: &Account,
     manifest: &StellarDeployManifest,
     scheme: Scheme,
@@ -236,7 +236,7 @@ pub async fn remove_signer(
 ) -> Result<String> {
     let target = signer_target(manifest, scheme, via_project_root)?;
     let key = parse_key(scheme, key_hex)?;
-    let configs = client_configs(net, account, target)?;
+    let configs = client_configs(env, account, target);
 
     let resp = retry(retry_cfg, || {
         let configs = configs.clone();
@@ -255,7 +255,7 @@ pub async fn remove_signer(
 /// `set-threshold`: update `numerator/denominator`.
 #[allow(clippy::too_many_arguments)] // independent CLI params; bundling would obscure
 pub async fn set_threshold(
-    net: &NetworkConfig,
+    env: &Env,
     account: &Account,
     manifest: &StellarDeployManifest,
     scheme: Scheme,
@@ -265,7 +265,7 @@ pub async fn set_threshold(
     retry_cfg: RetryConfig,
 ) -> Result<String> {
     let target = signer_target(manifest, scheme, via_project_root)?;
-    let configs = client_configs(net, account, target)?;
+    let configs = client_configs(env, account, target);
 
     let resp = retry(retry_cfg, || {
         let configs = configs.clone();

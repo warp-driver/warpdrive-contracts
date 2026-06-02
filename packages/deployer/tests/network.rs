@@ -45,6 +45,7 @@ async fn full_pipeline() {
         .expect("keygen");
     eprintln!("deployer address: {address}");
     let account = account_from_secret(&read_key_file(&key_file).unwrap()).unwrap();
+    let env = net.env().unwrap();
 
     // deploy both pipelines into two files.
     let eth_path: PathBuf = dir.path().join("deploy-ethereum.json");
@@ -86,7 +87,7 @@ async fn full_pipeline() {
     // add-signer (secp256k1, 33-byte key) against the ethereum manifest.
     let secp_key = format!("02{}", "11".repeat(32));
     let hash = add_signer(
-        &net,
+        &env,
         &account,
         &eth_manifest,
         Scheme::Secp256k1,
@@ -101,7 +102,7 @@ async fn full_pipeline() {
 
     // set-threshold.
     set_threshold(
-        &net,
+        &env,
         &account,
         &eth_manifest,
         Scheme::Secp256k1,
@@ -114,14 +115,14 @@ async fn full_pipeline() {
     .expect("set threshold");
 
     // project-spec-repo get/set.
-    let repo_before = get_project_spec_repo(&net, &account, &eth_manifest)
+    let repo_before = get_project_spec_repo(&env, &account, &eth_manifest)
         .await
         .expect("get repo");
     eprintln!("project_spec_repo: {repo_before}");
-    set_project_spec_repo(&net, &account, &eth_manifest, "ipfs://updated", retry_cfg)
+    set_project_spec_repo(&env, &account, &eth_manifest, "ipfs://updated", retry_cfg)
         .await
         .expect("set repo");
-    let repo_after = get_project_spec_repo(&net, &account, &eth_manifest)
+    let repo_after = get_project_spec_repo(&env, &account, &eth_manifest)
         .await
         .unwrap();
     assert_eq!(repo_after, "ipfs://updated");

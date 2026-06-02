@@ -62,11 +62,12 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         Command::AddSigner(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
             let hash = add_signer(
-                &net,
+                &env,
                 &account,
                 &manifest,
                 args.scheme,
@@ -80,11 +81,12 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         Command::RemoveSigner(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
             let hash = remove_signer(
-                &net,
+                &env,
                 &account,
                 &manifest,
                 args.scheme,
@@ -97,11 +99,12 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         Command::SetThreshold(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
             let hash = set_threshold(
-                &net,
+                &env,
                 &account,
                 &manifest,
                 args.scheme,
@@ -115,19 +118,21 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         Command::GetProjectSpecRepo(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
-            let repo = get_project_spec_repo(&net, &account, &manifest).await?;
+            let repo = get_project_spec_repo(&env, &account, &manifest).await?;
             println!("{repo}");
         }
 
         Command::SetProjectSpecRepo(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
             let hash =
-                set_project_spec_repo(&net, &account, &manifest, &args.repo, retry_cfg).await?;
+                set_project_spec_repo(&env, &account, &manifest, &args.repo, retry_cfg).await?;
             println!("{hash}");
         }
 
@@ -147,11 +152,12 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         Command::ProposeAdmin(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
             propose_admin(
-                &net,
+                &env,
                 &account,
                 &manifest,
                 args.target,
@@ -163,27 +169,30 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         Command::AcceptAdmin(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
-            accept_admin(&net, &account, &manifest, args.target, retry_cfg).await?;
+            accept_admin(&env, &account, &manifest, args.target, retry_cfg).await?;
             println!("accepted admin on {}", args.target);
         }
 
         Command::AcceptContractAdmin(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
             let hash =
-                accept_contract_admin(&net, &account, &manifest, args.target, retry_cfg).await?;
+                accept_contract_admin(&env, &account, &manifest, args.target, retry_cfg).await?;
             println!("{hash}");
         }
 
         Command::Handover(args) => {
-            let net = NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase);
+            let env =
+                NetworkConfig::new(args.network.rpc_url, args.network.network_passphrase).env()?;
             let account = resolve_account(args.identity.secret, args.identity.secret_file)?;
             let manifest = load_manifest(&args.deploy_file.deploy_file)?;
-            handover(&net, &account, &manifest, &args.owner, retry_cfg).await?;
+            handover(&env, &account, &manifest, &args.owner, retry_cfg).await?;
         }
     }
 

@@ -55,6 +55,7 @@ async fn handover_strips_deployer_privileges() {
         .await
         .expect("keygen owner");
     let owner = account_from_secret(&read_key_file(&owner_key).unwrap()).unwrap();
+    let env = net.env().unwrap();
 
     // Step 1-3: deploy + configure (add a signer directly, pre-handover).
     let manifest_path = dir.path().join("deploy.json");
@@ -76,7 +77,7 @@ async fn handover_strips_deployer_privileges() {
 
     let signer = format!("02{}", "11".repeat(32));
     add_signer(
-        &net,
+        &env,
         &deployer,
         &manifest,
         Scheme::Secp256k1,
@@ -90,18 +91,18 @@ async fn handover_strips_deployer_privileges() {
 
     // Step 4-5: handover (deployer proposes, project_root accepts downstream;
     // then project_root admin proposed to owner).
-    handover(&net, &deployer, &manifest, &owner_address, retry_cfg)
+    handover(&env, &deployer, &manifest, &owner_address, retry_cfg)
         .await
         .expect("handover");
 
     // Owner finishes the project_root handover with their own key.
-    accept_admin(&net, &owner, &manifest, Target::ProjectRoot, retry_cfg)
+    accept_admin(&env, &owner, &manifest, Target::ProjectRoot, retry_cfg)
         .await
         .expect("owner accept-admin");
 
     // Step 6: the deployer can no longer touch security directly.
     let direct = add_signer(
-        &net,
+        &env,
         &deployer,
         &manifest,
         Scheme::Secp256k1,
@@ -118,7 +119,7 @@ async fn handover_strips_deployer_privileges() {
 
     // The owner governs through project_root's forwarder.
     add_signer(
-        &net,
+        &env,
         &owner,
         &manifest,
         Scheme::Secp256k1,
