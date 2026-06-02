@@ -1,5 +1,6 @@
 use soroban_sdk::{
-    Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec, contract, contractimpl, vec,
+    Address, BytesN, Env, Error, IntoVal, InvokeError, String, Symbol, Val, Vec, contract,
+    contractimpl, panic_with_error, vec,
 };
 
 use warpdrive_shared::interfaces::{
@@ -39,6 +40,7 @@ impl ProjectRoot {
 /// Maps a `try_verify` result from the security contract into a `SecurityError`.
 /// You can later use `.into()` to convert to ProjectRootError if desired.
 fn map_security_result(
+    env: &Env,
     res: Result<
         Result<Val, soroban_sdk::ConversionError>,
         Result<SecurityError, soroban_sdk::InvokeError>,
@@ -48,7 +50,12 @@ fn map_security_result(
         Ok(Ok(v)) => Ok(v),
         Ok(Err(_conversion)) => panic!("ConversionError"),
         Err(Ok(e)) => Err(e),
-        Err(Err(invoke_err)) => panic!("{:?}", invoke_err),
+        // The invoked contract failed with an error that isn't one of our
+        // `SecurityError` variants. There's nothing typed to return, so re-raise it.
+        Err(Err(invoke_err)) => match invoke_err {
+            InvokeError::Contract(code) => panic_with_error!(env, Error::from_contract_error(code)),
+            InvokeError::Abort => panic!("cross-contract call aborted"),
+        },
     }
 }
 
@@ -69,7 +76,7 @@ impl ProjectRoot {
         storage::extend_instance_ttl(env);
         Forwarded::new(target.clone(), function.clone()).publish(env);
         let res = env.try_invoke_contract::<Val, SecurityError>(target, &function, args);
-        map_security_result(res)
+        map_security_result(env, res)
     }
 
     /// Confirms `target` belongs to this project before forwarding an
