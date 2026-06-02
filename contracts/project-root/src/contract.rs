@@ -3,7 +3,9 @@ use soroban_sdk::{
 };
 
 use warpdrive_shared::interfaces::{
-    project_root::{Forwarded, ProjectRootInterface, UpdatedSpecRepo},
+    project_root::{
+        ContractType, Forwarded, ProjectRootError, ProjectRootInterface, UpdatedSpecRepo,
+    },
     security::SecurityError,
     warpdrive::{ContractUpgraded, WarpDriveInterface},
 };
@@ -33,15 +35,40 @@ impl ProjectRoot {
     }
 }
 
+/// Maps a `try_verify` result from the security contract into a `SecurityError`.
+/// You can later use `.into()` to convert to ProjectRootError if desired.
+fn map_security_result(
+    res: Result<
+        Result<Val, soroban_sdk::ConversionError>,
+        Result<SecurityError, soroban_sdk::InvokeError>,
+    >,
+) -> Result<Val, SecurityError> {
+    match res {
+        Ok(Ok(v)) => Ok(v),
+        Ok(Err(_conversion)) => panic!("ConversionError"),
+        Err(Ok(e)) => Err(e),
+        Err(Err(invoke_err)) => panic!("{:?}", invoke_err),
+    }
+}
+
 impl ProjectRoot {
     /// Shared core for every forward path: admin gate, TTL, audit event, and
     /// the cross-contract call. `forward` and the typed helpers all funnel
     /// through here so the auth check and event are written once.
-    fn proxy(env: &Env, target: &Address, function: Symbol, args: Vec<Val>) -> Val {
+    ///
+    /// Currently, the only proxied functions that return errors return SecurityError, so we can map to that as needed.
+    /// Most calls can panic due to require_auth but that is different than a return error type.
+    fn proxy(
+        env: &Env,
+        target: &Address,
+        function: Symbol,
+        args: Vec<Val>,
+    ) -> Result<Val, SecurityError> {
         storage::get_admin(env).require_auth();
         storage::extend_instance_ttl(env);
         Forwarded::new(target.clone(), function.clone()).publish(env);
-        env.invoke_contract::<Val>(target, &function, args)
+        let res = env.try_invoke_contract::<Val, SecurityError>(target, &function, args);
+        map_security_result(res)
     }
 
     /// Confirms `target` belongs to this project before forwarding an
@@ -49,17 +76,23 @@ impl ProjectRoot {
     /// contracts always pass. Any other target must respond to the
     /// shared handler query `verification_contract()` with this project's
     /// registered verification contract address.
-    fn ensure_our_contract(env: &Env, target: &Address) {
+    fn ensure_our_contract(env: &Env, target: &Address) -> Result<ContractType, ProjectRootError> {
         let verification = storage::get_verification_contract(env);
-        if target == &storage::get_security_contract(env) || target == &verification {
-            return;
+        if target == &verification {
+            return Ok(ContractType::Verification);
+        }
+        if target == &storage::get_security_contract(env) {
+            return Ok(ContractType::Security);
         }
 
+        // Otherwise, ensure this is a proper handler
         let function = Symbol::new(env, "verification_contract");
         let returned =
             env.try_invoke_contract::<Address, soroban_sdk::Error>(target, &function, vec![env]);
         if !matches!(&returned, Ok(Ok(addr)) if addr == &verification) {
-            panic!("target is not part of this project");
+            Err(ProjectRootError::NotOurContract)
+        } else {
+            Ok(ContractType::Handler)
         }
     }
 }
@@ -128,7 +161,7 @@ impl ProjectRootInterface for ProjectRoot {
         let target = storage::get_security_contract(&env);
         let function = Symbol::new(&env, "add_signer");
         let args = vec![&env, key.to_val(), weight.into_val(&env)];
-        Self::proxy(&env, &target, function, args);
+        Self::proxy(&env, &target, function, args)?;
         Ok(())
     }
 
@@ -136,14 +169,15 @@ impl ProjectRootInterface for ProjectRoot {
         let target = storage::get_security_contract(&env);
         let function = Symbol::new(&env, "remove_signer");
         let args = vec![&env, key.to_val()];
-        Self::proxy(&env, &target, function, args);
+        // Currently, only errors on require_auth, so no other error to return
+        Self::proxy(&env, &target, function, args).unwrap();
     }
 
     fn add_ed25519_signer(env: Env, key: BytesN<32>, weight: u64) -> Result<(), SecurityError> {
         let target = storage::get_security_contract(&env);
         let function = Symbol::new(&env, "add_signer");
         let args = vec![&env, key.to_val(), weight.into_val(&env)];
-        Self::proxy(&env, &target, function, args);
+        Self::proxy(&env, &target, function, args)?;
         Ok(())
     }
 
@@ -151,37 +185,58 @@ impl ProjectRootInterface for ProjectRoot {
         let target = storage::get_security_contract(&env);
         let function = Symbol::new(&env, "remove_signer");
         let args = vec![&env, key.to_val()];
-        Self::proxy(&env, &target, function, args);
+        // Currently, only errors on require_auth, so no other error to return
+        Self::proxy(&env, &target, function, args).unwrap();
     }
 
     fn set_threshold(env: Env, numerator: u64, denominator: u64) -> Result<(), SecurityError> {
         let target = storage::get_security_contract(&env);
         let function = Symbol::new(&env, "set_threshold");
         let args = vec![&env, numerator.into_val(&env), denominator.into_val(&env)];
-        Self::proxy(&env, &target, function, args);
+        Self::proxy(&env, &target, function, args)?;
         Ok(())
     }
 
     // ── Typed helpers: WarpDriveInterface on any target ────────────────
 
-    fn upgrade_contract(env: Env, target: Address, new_wasm_hash: BytesN<32>, new_version: String) {
-        Self::ensure_our_contract(&env, &target);
+    fn upgrade_contract(
+        env: Env,
+        target: Address,
+        new_wasm_hash: BytesN<32>,
+        new_version: String,
+    ) -> Result<(), ProjectRootError> {
+        Self::ensure_our_contract(&env, &target)?;
         let function = Symbol::new(&env, "upgrade");
         let args = vec![&env, new_wasm_hash.to_val(), new_version.to_val()];
-        Self::proxy(&env, &target, function, args);
+        Self::proxy(&env, &target, function, args)?;
+        Ok(())
     }
 
-    fn propose_contract_admin(env: Env, target: Address, new_admin: Address) {
-        Self::ensure_our_contract(&env, &target);
+    fn propose_contract_admin(
+        env: Env,
+        target: Address,
+        new_admin: Address,
+    ) -> Result<(), ProjectRootError> {
+        let ctype = Self::ensure_our_contract(&env, &target)?;
         let function = Symbol::new(&env, "propose_admin");
         let args = vec![&env, new_admin.to_val()];
-        Self::proxy(&env, &target, function, args);
+        Self::proxy(&env, &target, function, args)?;
+        // If we take our own handler and change the admin away, it is no longer ours
+        if matches!(ctype, ContractType::Handler) {
+            storage::remove_handler(&env, &target);
+        }
+        Ok(())
     }
 
-    fn accept_contract_admin(env: Env, target: Address) {
-        Self::ensure_our_contract(&env, &target);
+    fn accept_contract_admin(env: Env, target: Address) -> Result<(), ProjectRootError> {
+        let ctype = Self::ensure_our_contract(&env, &target)?;
         let function = Symbol::new(&env, "accept_admin");
         let args = vec![&env];
-        Self::proxy(&env, &target, function, args);
+        Self::proxy(&env, &target, function, args)?;
+        // If we accept admin for a new handler, store it as ours
+        if matches!(ctype, ContractType::Handler) {
+            storage::add_handler(&env, &target);
+        }
+        Ok(())
     }
 }

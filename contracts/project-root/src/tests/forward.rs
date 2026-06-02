@@ -2,12 +2,12 @@ extern crate std;
 
 use crate::{ProjectRoot, ProjectRootClient};
 use soroban_sdk::{
-    Address, Env, IntoVal, String,
+    Address, Env, IntoVal, InvokeError, String,
     testutils::{Address as _, MockAuth, MockAuthInvoke},
 };
 use warpdrive_ed25519_security::{Ed25519Security, Ed25519SecurityClient};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
-use warpdrive_shared::interfaces::project_root::VerificationType;
+use warpdrive_shared::interfaces::project_root::{ProjectRootError, VerificationType};
 use warpdrive_shared::interfaces::security::SecurityError;
 use warpdrive_shared::testutils::{
     ed25519_pubkey, make_ed25519_key, make_secp256k1_key, secp256k1_pubkey,
@@ -150,8 +150,9 @@ fn add_secp256k1_signer_rejects_non_admin_caller() {
         },
     }]);
 
+    // The inner admin gate fails (attacker isn't the admin), aborting the call.
     let result = project_root.try_add_secp256k1_signer(&key, &50);
-    assert!(result.is_err());
+    assert_eq!(result, Err(Err(InvokeError::Abort)));
 
     env.mock_all_auths();
     assert_eq!(security.get_signer_weight(&key), 0);
@@ -336,10 +337,9 @@ fn propose_contract_admin_rejects_handler_with_other_verification() {
     assert_eq!(foreign_handler.admin(), project_root.address);
 
     let next_admin = Address::generate(&env);
-    assert!(
-        project_root
-            .try_propose_contract_admin(&foreign_handler.address, &next_admin)
-            .is_err()
+    assert_eq!(
+        project_root.try_propose_contract_admin(&foreign_handler.address, &next_admin),
+        Err(Ok(ProjectRootError::NotOurContract))
     );
     assert_eq!(foreign_handler.pending_admin(), None);
 }
@@ -399,10 +399,9 @@ fn accept_contract_admin_rejects_unrelated_target() {
     let unrelated = Secp256k1SecurityClient::new(&env, &unrelated_id);
     unrelated.propose_admin(&project_root.address);
 
-    assert!(
-        project_root
-            .try_accept_contract_admin(&unrelated.address)
-            .is_err()
+    assert_eq!(
+        project_root.try_accept_contract_admin(&unrelated.address),
+        Err(Ok(ProjectRootError::NotOurContract))
     );
     // Pending state on the unrelated contract is untouched.
     assert_eq!(
@@ -434,10 +433,9 @@ fn upgrade_contract_rejects_unrelated_target() {
     let new_wasm_hash = install_contract_wasm(&env);
     let new_version = String::from_str(&env, "9.9.9");
 
-    assert!(
-        project_root
-            .try_upgrade_contract(&unrelated.address, &new_wasm_hash, &new_version)
-            .is_err()
+    assert_eq!(
+        project_root.try_upgrade_contract(&unrelated.address, &new_wasm_hash, &new_version),
+        Err(Ok(ProjectRootError::NotOurContract))
     );
 }
 
@@ -514,10 +512,9 @@ fn typed_helper_uses_rotated_admin() {
             sub_invokes: &[],
         },
     }]);
-    assert!(
-        project_root
-            .try_add_secp256k1_signer(&key, &weight)
-            .is_err()
+    assert_eq!(
+        project_root.try_add_secp256k1_signer(&key, &weight),
+        Err(Err(InvokeError::Abort))
     );
 
     // New admin's auth does.
@@ -535,13 +532,13 @@ fn typed_helper_uses_rotated_admin() {
 }
 
 #[test]
-fn typed_helper_inner_require_auth_does_not_inherit_outer_auth() {
-    // Converted from the old generic-forward reentrancy test. Admin
-    // authorizes propose_contract_admin pointing back at project_root —
-    // the inner call hits ProjectRoot::propose_admin which itself does
-    // admin.require_auth. That nested require_auth requires its own auth
-    // entry; with mock_auths declaring only the outer call, the inner
-    // one fails and no pending admin is recorded.
+fn propose_contract_admin_rejects_targeting_project_root_itself() {
+    // Pointing the admin forwarder back at project_root is rejected before
+    // anything is forwarded. ensure_our_contract probes the target with a
+    // verification_contract() query, and querying project_root from inside its
+    // own executing frame is a reentrant call the host denies. The probe
+    // therefore fails the "is this ours?" check, so the call returns
+    // NotOurContract and records no pending admin.
     let env = Env::default();
 
     let (project_root, _security, admin) = deploy_proxy_with_registered_security(&env);
@@ -558,6 +555,6 @@ fn typed_helper_inner_require_auth_does_not_inherit_outer_auth() {
     }]);
 
     let result = project_root.try_propose_contract_admin(&project_root.address, &attacker);
-    assert!(result.is_err());
+    assert_eq!(result, Err(Ok(ProjectRootError::NotOurContract)));
     assert_eq!(project_root.pending_admin(), None);
 }

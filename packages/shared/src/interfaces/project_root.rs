@@ -1,9 +1,51 @@
 use soroban_sdk::{
-    Address, BytesN, Env, String, Symbol, contractclient, contractevent, contracttype,
+    Address, BytesN, Env, String, Symbol, contractclient, contracterror, contractevent,
+    contracttype,
 };
 
 use super::security::SecurityError;
 use super::warpdrive::WarpDriveInterface;
+
+// ── Error ────────────────────────────────────────────────────────────
+
+// Namespacing: ProjectRoot errors are from 100-199
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum ProjectRootError {
+    NotOurContract = 101,
+
+    // Mapped from SecurityError (use same enum values from their space)
+    ZeroDenominator = 201,
+    NumeratorExceedsDenominator = 202,
+    ZeroNumerator = 203,
+    ZeroWeight = 204,
+}
+
+impl From<SecurityError> for ProjectRootError {
+    fn from(value: SecurityError) -> Self {
+        match value {
+            SecurityError::ZeroDenominator => ProjectRootError::ZeroDenominator,
+            SecurityError::NumeratorExceedsDenominator => {
+                ProjectRootError::NumeratorExceedsDenominator
+            }
+            SecurityError::ZeroNumerator => ProjectRootError::ZeroNumerator,
+            SecurityError::ZeroWeight => ProjectRootError::ZeroWeight,
+        }
+    }
+}
+
+/// Classifies a forwarding target relative to this project: the registered
+/// security or verification contract, or a handler that reports this
+/// project's verification contract. Returned by the internal
+/// `ensure_our_contract` guard so the admin forwarders can apply
+/// handler-specific bookkeeping (tracking/untracking it in the handler set).
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ContractType {
+    Security,
+    Verification,
+    Handler,
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -83,15 +125,29 @@ pub trait ProjectRootInterface: WarpDriveInterface {
     // ── Typed WarpDriveInterface forwarders (any target) ───────────────
 
     /// Forward `upgrade(new_wasm_hash, new_version)` to `target`. ProjectRoot
-    /// must be `target`'s admin.
-    fn upgrade_contract(env: Env, target: Address, new_wasm_hash: BytesN<32>, new_version: String);
+    /// must be `target`'s admin. Errors with `NotOurContract` when `target`
+    /// is not part of this project.
+    fn upgrade_contract(
+        env: Env,
+        target: Address,
+        new_wasm_hash: BytesN<32>,
+        new_version: String,
+    ) -> Result<(), ProjectRootError>;
     /// Forward `propose_admin(new_admin)` to `target`. ProjectRoot must be
     /// `target`'s admin. Use this to begin rotating the admin of a downstream
-    /// contract away from ProjectRoot.
-    fn propose_contract_admin(env: Env, target: Address, new_admin: Address);
+    /// contract away from ProjectRoot; rotating a handler's admin away also
+    /// drops it from the tracked handler set. Errors with `NotOurContract`
+    /// when `target` is not part of this project.
+    fn propose_contract_admin(
+        env: Env,
+        target: Address,
+        new_admin: Address,
+    ) -> Result<(), ProjectRootError>;
     /// Forward `accept_admin()` to `target`. ProjectRoot must be `target`'s
-    /// pending admin. Use this to take over admin of a downstream contract.
-    fn accept_contract_admin(env: Env, target: Address);
+    /// pending admin. Use this to take over admin of a downstream contract;
+    /// accepting a handler also records it in the tracked handler set. Errors
+    /// with `NotOurContract` when `target` is not part of this project.
+    fn accept_contract_admin(env: Env, target: Address) -> Result<(), ProjectRootError>;
 
     // Queries
     fn security_contract(env: Env) -> Address;
