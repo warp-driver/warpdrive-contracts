@@ -133,3 +133,6 @@ impl CustomAccountInterface for MultisigAccount {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test;

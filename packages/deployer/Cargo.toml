@@ -29,3 +29,4 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 [dev-dependencies]
 warpdrive-shared = { path = "../shared", features = ["testutils"] }
 tempfile = "3"
+sha2 = "0.10"

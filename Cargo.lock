@@ -1970,6 +1970,8 @@ dependencies = [
 name = "warpdrive-multisig-account"
 version = "0.3.0-beta.1"
 dependencies = [
+ "ed25519-dalek",
+ "sha2",
  "soroban-sdk",
 ]
 

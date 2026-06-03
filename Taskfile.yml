@@ -94,7 +94,8 @@ tasks:
       NETWORK_PASSPHRASE:
         sh: echo "${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}"
     cmds:
-      - cd packages/deployer && cargo test --test multisig_native -- --ignored --nocapture
+      # - cd packages/deployer && cargo test --test multisig_native --test multisig_contract -- --ignored --nocapture
+      - cd packages/deployer && cargo test --test multisig_contract -- --ignored --nocapture
 
   doc-test:
     desc: Run documentation tests
