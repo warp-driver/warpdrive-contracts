@@ -17,8 +17,8 @@ use wasi_soroban_rs::wasi_stellar_rpc_client::{
     SimulateHostFunctionResultRaw, SimulateTransactionResponse,
 };
 use wasi_soroban_rs::xdr::{
-    LedgerFootprint, Limits, ScVal, SorobanResources, SorobanTransactionData,
-    SorobanTransactionDataExt, VecM, WriteXdr,
+    LedgerFootprint, Limits, SorobanResources, SorobanTransactionData, SorobanTransactionDataExt,
+    VecM, WriteXdr,
 };
 use wasi_soroban_rs::{
     Account, ContractId, Env, mock_account_entry, mock_env, mock_signer1,
@@ -27,7 +27,9 @@ use wasi_soroban_rs::{
 
 use warpdrive_client::project_root::VerificationType;
 use warpdrive_deployer::config::NetworkConfig;
-use warpdrive_deployer::deploy::{DeployParams, contract_scval, deploy_handler, deploy_pipeline};
+use warpdrive_deployer::deploy::{
+    DeployParams, admin_scval, contract_scval, deploy_handler, deploy_pipeline,
+};
 use warpdrive_deployer::error::DeployerError;
 use warpdrive_deployer::manifest::{StellarDeployManifest, Variant};
 use warpdrive_deployer::retry::RetryConfig;
@@ -89,9 +91,16 @@ fn sim_response() -> SimulateTransactionResponse {
     SimulateTransactionResponse {
         min_resource_fee: 100,
         transaction_data: tx_data.to_xdr_base64(Limits::none()).unwrap(),
+        // The result is the deployer's address: `deploy_pipeline`'s step-4
+        // adoption and `deploy_handler`'s registration query `admin()` /
+        // `pending_admin()`, which decode this. Deploys ignore the sim result
+        // (the new contract id comes from the send meta), so this is harmless
+        // for the create path.
         results: vec![SimulateHostFunctionResultRaw {
             auth: vec![],
-            xdr: ScVal::Void.to_xdr_base64(Limits::none()).unwrap(),
+            xdr: admin_scval(&account())
+                .to_xdr_base64(Limits::none())
+                .unwrap(),
         }],
         ..Default::default()
     }
@@ -150,7 +159,7 @@ async fn deploys_all_three_contracts_fresh() {
 }
 
 #[tokio::test]
-async fn skips_everything_when_manifest_complete() {
+async fn reuses_contracts_when_manifest_complete() {
     let wasm = wasm_dir();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("deploy.json");
@@ -161,9 +170,10 @@ async fn skips_everything_when_manifest_complete() {
     pre.contracts.secp256k1_verification = Some(cid(3));
     pre.persist(&path).unwrap();
 
-    // No mock RPC responses configured: if the pipeline tried to deploy
-    // anything it would error. Success proves it skipped every step.
-    let env = mock_env(None, None, None);
+    // All pipeline contracts are present, so the three deploy steps are skipped.
+    // Step-4 adoption still runs its admin queries + rotations against the mock;
+    // the deployed_id (cid 99) must NOT appear, proving nothing was re-deployed.
+    let env = deploy_env(cid(99));
     let m = deploy_pipeline(
         &env,
         &net(),
@@ -246,9 +256,10 @@ async fn deploy_handler_records_handler_in_manifest() {
     let reloaded = StellarDeployManifest::load(&path).unwrap();
     assert_eq!(reloaded.contracts.ethereum_handler, Some(cid(8)));
 
-    // Idempotent: a re-run with no RPC responses reuses the existing handler.
+    // Idempotent: a re-run reuses the existing handler (no new deploy) and
+    // re-attempts the idempotent registration.
     let m2 = deploy_handler(
-        &mock_env(None, None, None),
+        &deploy_env(cid(8)),
         &account(),
         wasm.path(),
         &path,

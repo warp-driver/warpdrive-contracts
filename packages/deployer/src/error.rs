@@ -4,6 +4,8 @@
 use thiserror::Error;
 use wasi_soroban_rs::SorobanHelperError;
 
+use crate::retry::Retryable;
+
 #[derive(Debug, Error)]
 pub enum DeployerError {
     #[error("soroban error: {0}")]
@@ -41,3 +43,32 @@ pub enum DeployerError {
 }
 
 pub type Result<T> = std::result::Result<T, DeployerError>;
+
+impl Retryable for SorobanHelperError {
+    fn is_retryable(&self) -> bool {
+        // `NotSupported` covers "Address authorization not yet supported": the
+        // signer can't satisfy an Address-credential auth requirement, and a
+        // re-simulation yields the identical result. Treat it (and any other
+        // NotSupported) as permanent. Everything else (RPC/network/simulation
+        // hiccups) may be transient, so stays retryable. See SOROBAN_RS.md.
+        !matches!(self, SorobanHelperError::NotSupported(_))
+    }
+}
+
+impl Retryable for DeployerError {
+    fn is_retryable(&self) -> bool {
+        match self {
+            DeployerError::Soroban(e) => e.is_retryable(),
+            // Transient: friendbot / network HTTP.
+            DeployerError::Http(_) => true,
+            // Permanent: re-running can't change the outcome.
+            DeployerError::InvalidArgument(_)
+            | DeployerError::Manifest(_)
+            | DeployerError::Config(_)
+            | DeployerError::Identity(_)
+            | DeployerError::Hex(_)
+            | DeployerError::Json(_)
+            | DeployerError::Io(_) => false,
+        }
+    }
+}

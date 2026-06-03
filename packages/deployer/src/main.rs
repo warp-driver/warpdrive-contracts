@@ -77,9 +77,6 @@ async fn run(cli: Cli) -> Result<()> {
                 retry_cfg,
             )
             .await?;
-            if args.register {
-                register_handler(&env, &account, &manifest, retry_cfg).await?;
-            }
             if let Some(handler) = manifest.handler() {
                 println!("{handler}");
             }

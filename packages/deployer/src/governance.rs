@@ -212,23 +212,22 @@ pub async fn accept_contract_admin(
     Ok(tx_hash(&resp))
 }
 
-/// `handover` (composite): hand every downstream's admin to project_root, then
-/// propose project_root's admin to `owner`. Idempotent via `admin()`/
-/// `pending_admin()` reads. The owner-side `accept-admin` is left to the owner.
-pub async fn handover(
+/// Step 4 of a deployment: rotate the security and verification contracts'
+/// admin to project_root, so project_root owns the whole pipeline. Called at
+/// the tail of `deploy::deploy_pipeline` — every deployed contract ends up
+/// owned by project_root. Idempotent via `admin()`/`pending_admin()` reads
+/// (a re-run skips what's already adopted). Signed by the deployer, who is the
+/// current admin of each downstream and of project_root.
+pub async fn adopt_downstreams(
     env: &Env,
     account: &Account,
     m: &StellarDeployManifest,
-    owner: &str,
     retry_cfg: RetryConfig,
 ) -> Result<()> {
     let project_root = require_project_root(m)?;
     let pr_addr = contract_scaddress(project_root);
-    let owner_addr = ScAddress::from_str(owner)
-        .map_err(|e| DeployerError::InvalidArgument(format!("invalid --owner address: {e}")))?;
     let project_root_str = project_root.to_string();
 
-    // Step 4: rotate each downstream admin to project_root.
     for target in [Target::Security, Target::Verification] {
         let current = AnyClient::build(env, account, m, target)?.admin().await?;
         if current == pr_addr {
@@ -245,8 +244,24 @@ pub async fn handover(
         eprintln!("=== project_root accepting admin of {target} ===");
         accept_contract_admin(env, account, m, target, retry_cfg).await?;
     }
+    Ok(())
+}
 
-    // Step 5: propose project_root's admin to the owner (owner accepts later).
+/// `handover`: rotate project_root's own admin to `owner` (step 5). The
+/// downstream contracts are already owned by project_root — that adoption
+/// (step 4) happens during `deploy_pipeline`, not here. Idempotent via
+/// `admin()`/`pending_admin()` reads. The owner-side `accept-admin` is left to
+/// the owner.
+pub async fn handover(
+    env: &Env,
+    account: &Account,
+    m: &StellarDeployManifest,
+    owner: &str,
+    retry_cfg: RetryConfig,
+) -> Result<()> {
+    let owner_addr = ScAddress::from_str(owner)
+        .map_err(|e| DeployerError::InvalidArgument(format!("invalid --owner address: {e}")))?;
+
     let pr_admin = AnyClient::build(env, account, m, Target::ProjectRoot)?
         .admin()
         .await?;

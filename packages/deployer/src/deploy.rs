@@ -7,11 +7,12 @@
 
 use std::path::{Path, PathBuf};
 
-use warpdrive_client::project_root::VerificationType;
+use warpdrive_client::project_root::{ProjectRootClient, VerificationType};
+use warpdrive_client::warpdrive::WarpdriveClient;
 use wasi_soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress, ScVal};
 use wasi_soroban_rs::{Account, Contract, ContractId, Env, IntoScVal};
 
-use crate::config::NetworkConfig;
+use crate::config::{NetworkConfig, client_configs};
 use crate::error::{DeployerError, Result};
 use crate::manifest::{StellarDeployManifest, Variant, require_project_root, require_verification};
 use crate::retry::{RetryConfig, retry};
@@ -271,19 +272,26 @@ pub async fn deploy_pipeline(
         }
     }
 
+    // Step 4: rotate security + verification admin to project_root, so every
+    // deployed contract ends up owned by project_root. Idempotent, so a re-run
+    // skips what's already adopted.
+    crate::governance::adopt_downstreams(env, account, &manifest, retry_cfg).await?;
+
     eprintln!("wrote deployment manifest to {}", manifest_path.display());
     Ok(manifest)
 }
 
 /// `deploy-handler`: deploy the variant's handler contract with project_root as
-/// its admin from birth (canonical flow), pointing at the manifest's
-/// verification contract, and record it in the manifest's handler slot.
-/// Idempotent — a re-run reuses an already-deployed handler.
+/// its admin from birth, pointing at the manifest's verification contract, and
+/// record it in the manifest's handler slot. Then track it in project_root's
+/// handler set — but only if this deployer is project_root's admin (queried);
+/// post-handover, project_root is owned by someone else, so the deployer prints
+/// guidance to run `register-handler` instead.
 ///
-/// The pipeline must already be deployed: the project_root (the handler's admin)
-/// and verification contracts are read from the manifest at `manifest_path`.
-/// Tracking the handler in project_root's set is a separate, cheaper step than
-/// the admin-handover dance — `governance::register_handler`.
+/// Idempotent: a re-run reuses an already-deployed handler and re-attempts the
+/// (idempotent) registration, so a deploy that failed mid-registration resumes.
+/// The pipeline must already be deployed — the project_root (the handler's
+/// admin) and verification contracts are read from the manifest.
 pub async fn deploy_handler(
     env: &Env,
     account: &Account,
@@ -292,32 +300,48 @@ pub async fn deploy_handler(
     retry_cfg: RetryConfig,
 ) -> Result<StellarDeployManifest> {
     let mut manifest = StellarDeployManifest::load(manifest_path).map_err(DeployerError::from)?;
+    let project_root = require_project_root(&manifest)?;
 
-    if let Some(id) = manifest.handler() {
-        eprintln!("=== reusing handler ({id}) ===");
-        return Ok(manifest);
+    match manifest.handler() {
+        Some(id) => eprintln!("=== reusing handler ({id}) ==="),
+        None => {
+            let verification = require_verification(&manifest)?;
+            let id = deploy_one(
+                env,
+                account,
+                wasm_dir,
+                handler_wasm(manifest.variant),
+                handler_ctor_args(contract_scval(project_root), verification),
+                retry_cfg,
+                "handler",
+            )
+            .await?;
+            set_handler(&mut manifest, id);
+            manifest.persist(manifest_path)?;
+            eprintln!(
+                "wrote handler to deployment manifest at {}",
+                manifest_path.display()
+            );
+        }
     }
 
-    // The handler is born admin'd by project_root, so it can be tracked with a
-    // single register_handler call rather than the propose/accept dance.
-    let project_root = require_project_root(&manifest)?;
-    let verification = require_verification(&manifest)?;
-    let id = deploy_one(
-        env,
-        account,
-        wasm_dir,
-        handler_wasm(manifest.variant),
-        handler_ctor_args(contract_scval(project_root), verification),
-        retry_cfg,
-        "handler",
-    )
-    .await?;
-    set_handler(&mut manifest, id);
-    manifest.persist(manifest_path)?;
+    // Track the handler in project_root's set — but only the project_root admin
+    // can do that. Query the current admin; if it's us, register; otherwise the
+    // pipeline has been handed over, so leave it to the project_root admin.
+    let pr_admin = ProjectRootClient::new(client_configs(env, account, project_root))
+        .admin()
+        .await
+        .map_err(DeployerError::from)?;
+    if pr_admin == ScAddress::Account(account.account_id()) {
+        crate::governance::register_handler(env, account, &manifest, retry_cfg).await?;
+        eprintln!("=== registered handler with project_root ===");
+    } else {
+        eprintln!(
+            "NOTE: this deployer is not project_root's admin, so it cannot register \
+             the handler. The project_root admin must run \
+             `register-handler --deploy-file <path>` to track it."
+        );
+    }
 
-    eprintln!(
-        "wrote handler to deployment manifest at {}",
-        manifest_path.display()
-    );
     Ok(manifest)
 }

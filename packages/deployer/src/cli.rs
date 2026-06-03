@@ -154,10 +154,6 @@ pub struct DeployHandlerArgs {
     /// Directory holding the contract wasm (default: WASM_DIR or /warpdrive/wasm).
     #[arg(long)]
     pub wasm_dir: Option<PathBuf>,
-    /// Also register the handler with project_root after deploying (propose +
-    /// accept the admin handover so it shows up in `list-handlers`).
-    #[arg(long)]
-    pub register: bool,
 }
 
 #[derive(Debug, Args)]
