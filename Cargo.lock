@@ -1967,6 +1967,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "warpdrive-multisig-account"
+version = "0.3.0-beta.1"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "warpdrive-project-root"
 version = "0.3.0-beta.1"
 dependencies = [
