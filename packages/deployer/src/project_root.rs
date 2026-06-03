@@ -61,5 +61,5 @@ pub async fn set_project_spec_repo(
     })
     .await?;
 
-    Ok(tx_hash(&resp))
+    tx_hash(&resp)
 }

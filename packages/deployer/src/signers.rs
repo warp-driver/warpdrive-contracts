@@ -221,7 +221,7 @@ pub async fn add_signer(
     })
     .await?;
 
-    Ok(tx_hash(&resp))
+    tx_hash(&resp)
 }
 
 /// `remove-signer`: drop a signer.
@@ -249,7 +249,7 @@ pub async fn remove_signer(
     })
     .await?;
 
-    Ok(tx_hash(&resp))
+    tx_hash(&resp)
 }
 
 /// `set-threshold`: update `numerator/denominator`.
@@ -277,5 +277,5 @@ pub async fn set_threshold(
     })
     .await?;
 
-    Ok(tx_hash(&resp))
+    tx_hash(&resp)
 }

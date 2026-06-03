@@ -209,7 +209,7 @@ pub async fn accept_contract_admin(
             .map_err(DeployerError::from)
     })
     .await?;
-    Ok(tx_hash(&resp))
+    tx_hash(&resp)
 }
 
 /// Step 4 of a deployment: rotate the security and verification contracts'
@@ -308,7 +308,7 @@ pub async fn register_handler(
             .map_err(DeployerError::from)
     })
     .await?;
-    Ok(tx_hash(&resp))
+    tx_hash(&resp)
 }
 
 #[cfg(test)]

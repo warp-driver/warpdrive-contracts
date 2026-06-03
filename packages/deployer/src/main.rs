@@ -10,7 +10,7 @@ use warpdrive_deployer::config::{NetworkConfig, resolve_wasm_dir};
 use warpdrive_deployer::deploy::{
     DEFAULT_PROJECT_SPEC_REPO, DEFAULT_THRESHOLD, DeployParams, deploy_handler, deploy_pipeline,
 };
-use warpdrive_deployer::error::Result;
+use warpdrive_deployer::error::{DeployerError, Result};
 use warpdrive_deployer::governance::{
     accept_admin, accept_contract_admin, handover, propose_admin, register_handler,
 };
@@ -54,7 +54,7 @@ async fn run(cli: Cli) -> Result<()> {
                     variant,
                     args.threshold_numerator,
                     args.threshold_denominator,
-                ),
+                )?,
                 verification_type: args
                     .verification_type
                     .map(Into::into)
@@ -241,25 +241,41 @@ async fn run(cli: Cli) -> Result<()> {
 }
 
 /// Resolve `(numerator, denominator)`: explicit flag → variant-specific env
-/// (`SECP_*` / `ED_*`) → built-in default.
+/// (`SECP_*` / `ED_*`) → built-in default. Errors if a consulted env var is set
+/// but isn't a valid `u64` (rather than silently falling back to the default).
 fn resolve_threshold(
     variant: Variant,
     numerator_flag: Option<u64>,
     denominator_flag: Option<u64>,
-) -> (u64, u64) {
+) -> Result<(u64, u64)> {
     let (num_env, den_env) = match variant {
         Variant::Ethereum => ("SECP_THRESHOLD_NUM", "SECP_THRESHOLD_DEN"),
         Variant::Stellar => ("ED_THRESHOLD_NUM", "ED_THRESHOLD_DEN"),
     };
-    let numerator = numerator_flag
-        .or_else(|| env_u64(num_env))
-        .unwrap_or(DEFAULT_THRESHOLD.0);
-    let denominator = denominator_flag
-        .or_else(|| env_u64(den_env))
-        .unwrap_or(DEFAULT_THRESHOLD.1);
-    (numerator, denominator)
+    // The flag wins outright; the env var is only consulted (and validated) when
+    // the flag is absent.
+    let numerator = match numerator_flag {
+        Some(n) => n,
+        None => env_u64(num_env)?.unwrap_or(DEFAULT_THRESHOLD.0),
+    };
+    let denominator = match denominator_flag {
+        Some(d) => d,
+        None => env_u64(den_env)?.unwrap_or(DEFAULT_THRESHOLD.1),
+    };
+    Ok((numerator, denominator))
 }
 
-fn env_u64(name: &str) -> Option<u64> {
-    std::env::var(name).ok().and_then(|v| v.parse().ok())
+/// Read `name` as a `u64`. `Ok(None)` when unset; `Err` when it's present but
+/// not a valid `u64` (or not UTF-8).
+fn env_u64(name: &str) -> Result<Option<u64>> {
+    match std::env::var(name) {
+        Ok(v) => v
+            .parse::<u64>()
+            .map(Some)
+            .map_err(|e| DeployerError::Config(format!("{name}={v:?} is not a valid u64: {e}"))),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => Err(DeployerError::Config(format!(
+            "{name} is set but not valid UTF-8"
+        ))),
+    }
 }

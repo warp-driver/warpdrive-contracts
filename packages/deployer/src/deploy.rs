@@ -190,11 +190,16 @@ pub async fn deploy_pipeline(
                     params.variant
                 )));
             }
+            if existing.admin != admin {
+                return Err(DeployerError::Manifest(format!(
+                    "existing partial deploy with admin {}; refusing to resume with different admin {}",
+                    existing.admin, admin,
+                )));
+            }
             existing
         }
         None => StellarDeployManifest::new(admin.clone(), params.variant),
     };
-    manifest.admin = admin;
     manifest.rpc_url = Some(net.rpc_url.clone());
     manifest.network_passphrase = Some(net.network_passphrase.clone());
 

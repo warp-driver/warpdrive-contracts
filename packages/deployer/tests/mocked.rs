@@ -115,7 +115,13 @@ fn sim_for_execute() -> SimulateTransactionResponse {
 fn env_for_call(sim: SimulateTransactionResponse, with_send: bool) -> (Env, Account) {
     let account = account();
     let entry = mock_account_entry(&account.account_id().to_string());
-    let send = with_send.then(|| Ok(mock_transaction_response()));
+    // A confirmed submission carries a tx hash; the mock builder leaves it
+    // `None`, so set one — `tx_hash()` now errors on a missing hash.
+    let send = with_send.then(|| {
+        let mut resp = mock_transaction_response();
+        resp.response.tx_hash = Some("mocktxhash".to_string());
+        Ok(resp)
+    });
     let env = mock_env(Some(Ok(entry)), Some(Ok(sim)), send);
     (env, account)
 }

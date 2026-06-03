@@ -110,7 +110,10 @@ fn sim_response() -> SimulateTransactionResponse {
 /// V4 transaction meta carrying the new contract address as the return value).
 fn deploy_env(deployed_id: ContractId) -> Env {
     let entry = mock_account_entry(&account().account_id().to_string());
-    let send = mock_transaction_response_v4_with_return_value(contract_scval(deployed_id));
+    let mut send = mock_transaction_response_v4_with_return_value(contract_scval(deployed_id));
+    // Step-4 adoption / handler registration go through `tx_hash()`, which now
+    // errors on a missing hash; the mock builder leaves it `None`, so set one.
+    send.response.tx_hash = Some("mocktxhash".to_string());
     mock_env(Some(Ok(entry)), Some(Ok(sim_response())), Some(Ok(send)))
 }
 
@@ -164,7 +167,8 @@ async fn reuses_contracts_when_manifest_complete() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("deploy.json");
 
-    let mut pre = StellarDeployManifest::new("GOLD".to_string(), Variant::Ethereum);
+    // Same admin as the deploying account, so the resume admin-guard passes.
+    let mut pre = StellarDeployManifest::new(account().account_id().to_string(), Variant::Ethereum);
     pre.contracts.project_root = Some(cid(1));
     pre.contracts.secp256k1_security = Some(cid(2));
     pre.contracts.secp256k1_verification = Some(cid(3));
@@ -197,7 +201,8 @@ async fn resumes_partial_deploying_only_missing() {
     let path = dir.path().join("deploy.json");
 
     // Only security already deployed.
-    let mut pre = StellarDeployManifest::new("GOLD".to_string(), Variant::Ethereum);
+    // Same admin as the deploying account, so the resume admin-guard passes.
+    let mut pre = StellarDeployManifest::new(account().account_id().to_string(), Variant::Ethereum);
     pre.contracts.secp256k1_security = Some(cid(2));
     pre.persist(&path).unwrap();
 
@@ -278,7 +283,8 @@ async fn deploy_handler_errors_when_pipeline_incomplete() {
 
     // Manifest with only the security contract — no project_root (the handler's
     // admin) and no verification (its target) to bind to.
-    let mut pre = StellarDeployManifest::new("GOLD".to_string(), Variant::Ethereum);
+    // Same admin as the deploying account, so the resume admin-guard passes.
+    let mut pre = StellarDeployManifest::new(account().account_id().to_string(), Variant::Ethereum);
     pre.contracts.secp256k1_security = Some(cid(2));
     pre.persist(&path).unwrap();
 

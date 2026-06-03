@@ -15,12 +15,18 @@ pub mod project_root;
 pub mod retry;
 pub mod signers;
 
-use wasi_soroban_rs::SorobanTransactionResponse;
+use wasi_soroban_rs::{SorobanHelperError, SorobanTransactionResponse};
 
-/// Extract a printable transaction hash from a submitted-transaction response.
-pub fn tx_hash(resp: &SorobanTransactionResponse) -> String {
-    resp.response
-        .tx_hash
-        .clone()
-        .unwrap_or_else(|| "<no tx hash>".to_string())
+use crate::error::{DeployerError, Result};
+
+/// The submitted transaction's hash. A confirmed submission always carries one,
+/// so a missing hash means the response wasn't a successful submission — this
+/// errors rather than returning a placeholder that downstream code would read
+/// as success.
+pub fn tx_hash(resp: &SorobanTransactionResponse) -> Result<String> {
+    resp.response.tx_hash.clone().ok_or_else(|| {
+        DeployerError::Soroban(SorobanHelperError::TransactionFailed(
+            "submitted transaction response carried no tx hash".to_string(),
+        ))
+    })
 }

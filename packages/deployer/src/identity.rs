@@ -170,12 +170,19 @@ async fn fund_via_friendbot(
             let resp = reqwest::get(&url)
                 .await
                 .map_err(|e| DeployerError::Http(format!("friendbot request failed: {e}")))?;
-            if resp.status().is_success() {
+            let status = resp.status();
+            if status.is_success() {
                 Ok(())
             } else {
+                let msg = match status.as_u16() {
+                    400 => "Invalid account address or account already funded",
+                    404 => "Account does not exist",
+                    500 => "Server-side error: try again later",
+                    _ => "Unknown",
+                };
                 Err(DeployerError::Http(format!(
-                    "friendbot returned status {}",
-                    resp.status()
+                    "friendbot returned status {}: {}",
+                    status, msg
                 )))
             }
         }
