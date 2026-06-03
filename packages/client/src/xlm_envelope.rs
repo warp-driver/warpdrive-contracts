@@ -19,11 +19,7 @@ pub struct XlmEnvelope {
 }
 
 impl XlmEnvelope {
-    pub fn new(
-        payload: Vec<u8>,
-        event_id: [u8; 20],
-        ordering: [u8; 12],
-    ) -> Self {
+    pub fn new(payload: Vec<u8>, event_id: [u8; 20], ordering: [u8; 12]) -> Self {
         Self {
             payload,
             event_id,

@@ -23,8 +23,9 @@ extern crate std;
 
 use crate::{ProjectRoot, ProjectRootClient};
 use soroban_sdk::{
-    Address, Env, IntoVal, String,
+    Address, Env, Error, IntoVal, InvokeError, String,
     testutils::{Address as _, MockAuth, MockAuthInvoke},
+    xdr::{ScErrorCode, ScErrorType},
 };
 use warpdrive_ed25519_security::{Ed25519Security, Ed25519SecurityClient};
 use warpdrive_ed25519_verification::{Ed25519Verification, Ed25519VerificationClient};
@@ -33,6 +34,14 @@ use warpdrive_shared::testutils::{ed25519_pubkey, make_ed25519_key};
 use warpdrive_stellar_handler::{StellarHandler, StellarHandlerClient};
 
 use super::setup::install_contract_wasm;
+
+/// The host error a contract frame aborts with when an admin `require_auth`
+/// gate is unmet, as surfaced through a `try_` client whose method declares no
+/// contract error type (e.g. `upgrade`, which returns `()`). Methods that DO
+/// declare a contract error surface the same abort as `Err(Err(Abort))`.
+fn auth_denied() -> Error {
+    Error::from_type_and_code(ScErrorType::Context, ScErrorCode::InvalidAction)
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -181,7 +190,10 @@ fn deployer_has_no_remaining_privileges_after_handover() {
             sub_invokes: &[],
         },
     }]);
-    assert!(d.security.try_add_signer(&new_signer, &50).is_err());
+    assert_eq!(
+        d.security.try_add_signer(&new_signer, &50),
+        Err(Err(InvokeError::Abort))
+    );
 
     // (b) Deployer can't upgrade verification directly.
     let wasm_hash = install_contract_wasm(&env);
@@ -196,10 +208,9 @@ fn deployer_has_no_remaining_privileges_after_handover() {
             sub_invokes: &[],
         },
     }]);
-    assert!(
-        d.verification
-            .try_upgrade(&wasm_hash, &new_version)
-            .is_err()
+    assert_eq!(
+        d.verification.try_upgrade(&wasm_hash, &new_version),
+        Err(Ok(auth_denied()))
     );
 
     // (c) Deployer can't upgrade the handler directly.
@@ -212,7 +223,10 @@ fn deployer_has_no_remaining_privileges_after_handover() {
             sub_invokes: &[],
         },
     }]);
-    assert!(d.handler.try_upgrade(&wasm_hash, &new_version).is_err());
+    assert_eq!(
+        d.handler.try_upgrade(&wasm_hash, &new_version),
+        Err(Ok(auth_denied()))
+    );
 
     // (d) Deployer can't even speak to project_root: not as the admin,
     //     not as a forwarder, not as a typed helper.
@@ -225,10 +239,9 @@ fn deployer_has_no_remaining_privileges_after_handover() {
             sub_invokes: &[],
         },
     }]);
-    assert!(
-        d.project_root
-            .try_upgrade(&wasm_hash, &new_version)
-            .is_err()
+    assert_eq!(
+        d.project_root.try_upgrade(&wasm_hash, &new_version),
+        Err(Ok(auth_denied()))
     );
 
     env.mock_auths(&[MockAuth {
@@ -240,14 +253,33 @@ fn deployer_has_no_remaining_privileges_after_handover() {
             sub_invokes: &[],
         },
     }]);
-    assert!(
-        d.project_root
-            .try_add_ed25519_signer(&new_signer, &50)
-            .is_err()
+    assert_eq!(
+        d.project_root.try_add_ed25519_signer(&new_signer, &50),
+        Err(Err(InvokeError::Abort))
     );
 
     // (e) Final state is unchanged by all those failed attempts.
     assert_eq!(d.security.get_signer_weight(&new_signer), 0);
+}
+
+#[test]
+fn handler_is_tracked_in_list_after_handover() {
+    // Step 4 of the deploy script accepts the handler's admin via
+    // accept_contract_admin, which registers it in project_root's handler set.
+    // list_handlers must surface it (and only it).
+    let env = Env::default();
+    let d = run_deployment_script(&env);
+
+    assert_eq!(
+        d.project_root.list_handlers(),
+        soroban_sdk::vec![&env, d.handler.address.clone()]
+    );
+
+    // Security and verification are governed but are NOT handlers, so they
+    // never appear in the handler set.
+    let handlers = d.project_root.list_handlers();
+    assert!(!handlers.contains(&d.security.address));
+    assert!(!handlers.contains(&d.verification.address));
 }
 
 // ── Owner exercises governance through project_root ────────────────────

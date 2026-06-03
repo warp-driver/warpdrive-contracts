@@ -2,12 +2,13 @@ extern crate std;
 
 use crate::{ProjectRoot, ProjectRootClient};
 use soroban_sdk::{
-    Address, Env, IntoVal, String,
-    testutils::{Address as _, MockAuth, MockAuthInvoke},
+    Address, Env, IntoVal, InvokeError, Map, String, Symbol, Val,
+    testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke},
+    vec,
 };
 use warpdrive_ed25519_security::{Ed25519Security, Ed25519SecurityClient};
 use warpdrive_secp256k1_security::{Secp256k1Security, Secp256k1SecurityClient};
-use warpdrive_shared::interfaces::project_root::VerificationType;
+use warpdrive_shared::interfaces::project_root::{ProjectRootError, VerificationType};
 use warpdrive_shared::interfaces::security::SecurityError;
 use warpdrive_shared::testutils::{
     ed25519_pubkey, make_ed25519_key, make_secp256k1_key, secp256k1_pubkey,
@@ -150,8 +151,9 @@ fn add_secp256k1_signer_rejects_non_admin_caller() {
         },
     }]);
 
+    // The inner admin gate fails (attacker isn't the admin), aborting the call.
     let result = project_root.try_add_secp256k1_signer(&key, &50);
-    assert!(result.is_err());
+    assert_eq!(result, Err(Err(InvokeError::Abort)));
 
     env.mock_all_auths();
     assert_eq!(security.get_signer_weight(&key), 0);
@@ -336,10 +338,9 @@ fn propose_contract_admin_rejects_handler_with_other_verification() {
     assert_eq!(foreign_handler.admin(), project_root.address);
 
     let next_admin = Address::generate(&env);
-    assert!(
-        project_root
-            .try_propose_contract_admin(&foreign_handler.address, &next_admin)
-            .is_err()
+    assert_eq!(
+        project_root.try_propose_contract_admin(&foreign_handler.address, &next_admin),
+        Err(Ok(ProjectRootError::NotOurContract))
     );
     assert_eq!(foreign_handler.pending_admin(), None);
 }
@@ -399,10 +400,9 @@ fn accept_contract_admin_rejects_unrelated_target() {
     let unrelated = Secp256k1SecurityClient::new(&env, &unrelated_id);
     unrelated.propose_admin(&project_root.address);
 
-    assert!(
-        project_root
-            .try_accept_contract_admin(&unrelated.address)
-            .is_err()
+    assert_eq!(
+        project_root.try_accept_contract_admin(&unrelated.address),
+        Err(Ok(ProjectRootError::NotOurContract))
     );
     // Pending state on the unrelated contract is untouched.
     assert_eq!(
@@ -434,10 +434,9 @@ fn upgrade_contract_rejects_unrelated_target() {
     let new_wasm_hash = install_contract_wasm(&env);
     let new_version = String::from_str(&env, "9.9.9");
 
-    assert!(
-        project_root
-            .try_upgrade_contract(&unrelated.address, &new_wasm_hash, &new_version)
-            .is_err()
+    assert_eq!(
+        project_root.try_upgrade_contract(&unrelated.address, &new_wasm_hash, &new_version),
+        Err(Ok(ProjectRootError::NotOurContract))
     );
 }
 
@@ -514,10 +513,9 @@ fn typed_helper_uses_rotated_admin() {
             sub_invokes: &[],
         },
     }]);
-    assert!(
-        project_root
-            .try_add_secp256k1_signer(&key, &weight)
-            .is_err()
+    assert_eq!(
+        project_root.try_add_secp256k1_signer(&key, &weight),
+        Err(Err(InvokeError::Abort))
     );
 
     // New admin's auth does.
@@ -534,14 +532,255 @@ fn typed_helper_uses_rotated_admin() {
     assert_eq!(security.get_signer_weight(&key), weight);
 }
 
+// ── list_handlers tracking ─────────────────────────────────────────────
+
+/// Build project_root with a real ed25519 verification contract plus a Stellar
+/// handler pointing back at it (admin still the EoA). Returns the pieces the
+/// handler-tracking tests need.
+fn deploy_with_handler<'a>(
+    env: &Env,
+) -> (
+    ProjectRootClient<'a>,
+    warpdrive_stellar_handler::StellarHandlerClient<'a>,
+    Address,
+) {
+    use warpdrive_ed25519_verification::Ed25519Verification;
+    use warpdrive_stellar_handler::{StellarHandler, StellarHandlerClient};
+
+    let admin = Address::generate(env);
+    let repo = String::from_str(env, "https://github.com/example/spec");
+    let security_id = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let verification_id = env.register(Ed25519Verification, (&admin, &security_id));
+    let project_root_id = env.register(
+        ProjectRoot,
+        (
+            &admin,
+            &security_id,
+            &verification_id,
+            &repo,
+            VerificationType::Stellar,
+        ),
+    );
+    let project_root = ProjectRootClient::new(env, &project_root_id);
+
+    let handler_id = env.register(StellarHandler, (&admin, &verification_id));
+    let handler = StellarHandlerClient::new(env, &handler_id);
+
+    (project_root, handler, admin)
+}
+
 #[test]
-fn typed_helper_inner_require_auth_does_not_inherit_outer_auth() {
-    // Converted from the old generic-forward reentrancy test. Admin
-    // authorizes propose_contract_admin pointing back at project_root —
-    // the inner call hits ProjectRoot::propose_admin which itself does
-    // admin.require_auth. That nested require_auth requires its own auth
-    // entry; with mock_auths declaring only the outer call, the inner
-    // one fails and no pending admin is recorded.
+fn list_handlers_is_empty_before_any_registration() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, _security, _admin) = deploy_proxy_with_registered_security(&env);
+    assert_eq!(project_root.list_handlers(), soroban_sdk::vec![&env]);
+}
+
+#[test]
+fn accept_contract_admin_tracks_handler_in_list() {
+    // Accepting a handler's admin (the handover dance a deploy script runs)
+    // records it in the tracked handler set surfaced by list_handlers.
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, handler, _admin) = deploy_with_handler(&env);
+    assert_eq!(project_root.list_handlers(), soroban_sdk::vec![&env]);
+
+    // Handler proposes project_root, project_root accepts on its own behalf.
+    handler.propose_admin(&project_root.address);
+    project_root.accept_contract_admin(&handler.address);
+    assert_eq!(handler.admin(), project_root.address);
+
+    assert_eq!(
+        project_root.list_handlers(),
+        soroban_sdk::vec![&env, handler.address.clone()]
+    );
+
+    // Re-accepting the same handler is idempotent — no duplicate entry.
+    handler.propose_admin(&project_root.address);
+    project_root.accept_contract_admin(&handler.address);
+    assert_eq!(
+        project_root.list_handlers(),
+        soroban_sdk::vec![&env, handler.address]
+    );
+}
+
+#[test]
+fn register_handler_tracks_handler_and_is_idempotent() {
+    // Canonical flow: the handler is born with project_root as its admin, then
+    // register_handler tracks it — no admin-handover dance.
+    use warpdrive_ed25519_verification::Ed25519Verification;
+    use warpdrive_stellar_handler::{StellarHandler, StellarHandlerClient};
+
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let repo = String::from_str(&env, "https://github.com/example/spec");
+    let security_id = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let verification_id = env.register(Ed25519Verification, (&admin, &security_id));
+    let project_root_id = env.register(
+        ProjectRoot,
+        (
+            &admin,
+            &security_id,
+            &verification_id,
+            &repo,
+            VerificationType::Stellar,
+        ),
+    );
+    let project_root = ProjectRootClient::new(&env, &project_root_id);
+
+    // Born admin'd by project_root.
+    let handler_id = env.register(StellarHandler, (&project_root_id, &verification_id));
+    let handler = StellarHandlerClient::new(&env, &handler_id);
+    assert_eq!(handler.admin(), project_root.address);
+
+    assert_eq!(project_root.list_handlers(), vec![&env]);
+    project_root.register_handler(&handler.address);
+    assert_eq!(
+        project_root.list_handlers(),
+        vec![&env, handler.address.clone()]
+    );
+
+    // Re-registering is a no-op — no duplicate entry.
+    project_root.register_handler(&handler.address);
+    assert_eq!(project_root.list_handlers(), vec![&env, handler.address]);
+}
+
+#[test]
+fn register_handler_rejects_non_handler_and_foreign_targets() {
+    use warpdrive_ed25519_verification::Ed25519Verification;
+    use warpdrive_stellar_handler::{StellarHandler, StellarHandlerClient};
+
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let repo = String::from_str(&env, "https://github.com/example/spec");
+    let security_id = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let verification_id = env.register(Ed25519Verification, (&admin, &security_id));
+    let project_root_id = env.register(
+        ProjectRoot,
+        (
+            &admin,
+            &security_id,
+            &verification_id,
+            &repo,
+            VerificationType::Stellar,
+        ),
+    );
+    let project_root = ProjectRootClient::new(&env, &project_root_id);
+
+    // The registered security/verification contracts are ours, but they are
+    // not handlers.
+    assert_eq!(
+        project_root.try_register_handler(&security_id),
+        Err(Ok(ProjectRootError::NotAHandler))
+    );
+
+    // A handler pointing at a *different* verification is foreign.
+    let other_security = env.register(Ed25519Security, (&admin, 2u64, 3u64));
+    let other_verification = env.register(Ed25519Verification, (&admin, &other_security));
+    let foreign_handler = env.register(StellarHandler, (&admin, &other_verification));
+    let foreign = StellarHandlerClient::new(&env, &foreign_handler);
+    assert_eq!(
+        project_root.try_register_handler(&foreign.address),
+        Err(Ok(ProjectRootError::NotOurContract))
+    );
+
+    assert_eq!(project_root.list_handlers(), vec![&env]);
+}
+
+#[test]
+fn propose_contract_admin_does_not_untrack_handler() {
+    // Rotating a tracked handler's admin away must NOT drop it from the set —
+    // removal is always explicit via unregister_handler.
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, handler, _admin) = deploy_with_handler(&env);
+    handler.propose_admin(&project_root.address);
+    project_root.accept_contract_admin(&handler.address);
+    assert_eq!(
+        project_root.list_handlers(),
+        vec![&env, handler.address.clone()]
+    );
+
+    // Begin rotating the handler's admin away — it stays tracked.
+    let next_admin = Address::generate(&env);
+    project_root.propose_contract_admin(&handler.address, &next_admin);
+    assert_eq!(
+        project_root.list_handlers(),
+        vec![&env, handler.address.clone()]
+    );
+
+    // Only an explicit unregister removes it.
+    project_root.unregister_handler(&handler.address);
+    assert_eq!(project_root.list_handlers(), vec![&env]);
+}
+
+#[test]
+fn register_and_unregister_emit_events() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (project_root, handler, _admin) = deploy_with_handler(&env);
+    let empty_data: Val = Map::<Symbol, Val>::new(&env).into_val(&env);
+    let registered = (
+        project_root.address.clone(),
+        (
+            Symbol::new(&env, "handler_registered"),
+            handler.address.clone(),
+        )
+            .into_val(&env),
+        empty_data,
+    );
+    let removed = (
+        project_root.address.clone(),
+        (
+            Symbol::new(&env, "handler_removed"),
+            handler.address.clone(),
+        )
+            .into_val(&env),
+        empty_data,
+    );
+
+    // `env.events().all()` reflects the most recent invocation, so each call's
+    // events are asserted right after it.
+
+    // register → exactly one HandlerRegistered from project_root.
+    project_root.register_handler(&handler.address);
+    assert_eq!(
+        env.events().all().filter_by_contract(&project_root.address),
+        vec![&env, registered]
+    );
+
+    // unregister → exactly one HandlerRemoved.
+    project_root.unregister_handler(&handler.address);
+    assert_eq!(
+        env.events().all().filter_by_contract(&project_root.address),
+        vec![&env, removed]
+    );
+
+    // Re-unregistering an absent handler is a silent no-op — no event emitted.
+    project_root.unregister_handler(&handler.address);
+    assert_eq!(
+        env.events().all().filter_by_contract(&project_root.address),
+        vec![&env]
+    );
+}
+
+#[test]
+fn propose_contract_admin_rejects_targeting_project_root_itself() {
+    // Pointing the admin forwarder back at project_root is rejected before
+    // anything is forwarded. ensure_our_contract probes the target with a
+    // verification_contract() query, and querying project_root from inside its
+    // own executing frame is a reentrant call the host denies. The probe
+    // therefore fails the "is this ours?" check, so the call returns
+    // NotOurContract and records no pending admin.
     let env = Env::default();
 
     let (project_root, _security, admin) = deploy_proxy_with_registered_security(&env);
@@ -558,6 +797,6 @@ fn typed_helper_inner_require_auth_does_not_inherit_outer_auth() {
     }]);
 
     let result = project_root.try_propose_contract_admin(&project_root.address, &attacker);
-    assert!(result.is_err());
+    assert_eq!(result, Err(Ok(ProjectRootError::NotOurContract)));
     assert_eq!(project_root.pending_admin(), None);
 }

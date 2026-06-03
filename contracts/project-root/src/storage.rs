@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Env, String, contracttype};
+use soroban_sdk::{Address, Env, String, Vec, contracttype};
 use warpdrive_shared::ttl;
 
 pub use warpdrive_shared::interfaces::project_root::VerificationType;
@@ -11,6 +11,7 @@ pub enum DataKey {
     VerificationContract,
     ProjectSpecRepo,
     VerificationType,
+    Handlers,
 }
 
 pub fn get_admin(env: &Env) -> Address {
@@ -79,6 +80,41 @@ pub fn set_verification_type(env: &Env, vtype: &VerificationType) {
     env.storage()
         .instance()
         .set(&DataKey::VerificationType, vtype);
+}
+
+/// Returns the registered handler contracts, or an empty `Vec` if none have
+/// been added yet (the key is unset until the first `add_handler`).
+pub fn get_handlers(env: &Env) -> Vec<Address> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Handlers)
+        .unwrap_or_else(|| Vec::new(env))
+}
+
+/// Registers `handler`, ignoring the call if it is already present so the set
+/// stays free of duplicates. Returns `true` if the handler was newly added,
+/// `false` if it was already tracked (so callers can avoid re-emitting events).
+pub fn add_handler(env: &Env, handler: &Address) -> bool {
+    let mut handlers = get_handlers(env);
+    if handlers.first_index_of(handler).is_some() {
+        return false;
+    }
+    handlers.push_back(handler.clone());
+    env.storage().instance().set(&DataKey::Handlers, &handlers);
+    true
+}
+
+/// Removes `handler` if present. Returns `true` if an entry was removed,
+/// `false` when it wasn't tracked (so callers can avoid emitting events).
+pub fn remove_handler(env: &Env, handler: &Address) -> bool {
+    let mut handlers = get_handlers(env);
+    if let Some(index) = handlers.first_index_of(handler) {
+        handlers.remove(index);
+        env.storage().instance().set(&DataKey::Handlers, &handlers);
+        true
+    } else {
+        false
+    }
 }
 
 pub fn extend_instance_ttl(env: &Env) {

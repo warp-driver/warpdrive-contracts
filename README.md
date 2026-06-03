@@ -102,10 +102,12 @@ docker run -d --rm --name wdm \
   -e RPC_URL=https://soroban-testnet.stellar.org \
   -e NETWORK_PASSPHRASE="Test SDF Network ; September 2015" \
   -v $PWD/out:/out \
-  ghcr.io/warp-driver/warpdrive-stellar-middleware:0.2
+  ghcr.io/warp-driver/warpdrive-stellar-middleware:0.3
 
 # easy run commands to deploy and update the contracts
-docker exec wdm /warpdrive/cli.sh deploy --output-path /out/deploy.json
+docker exec wdm warpdrive-deployer keygen
+
+docker exec wdm warpdrive-deployer deploy --output-path /out/deploy.json
 ```
 
 ## Dev Quick Start

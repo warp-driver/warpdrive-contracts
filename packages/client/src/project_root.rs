@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use wasi_soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress, ScString, ScVal};
+use wasi_soroban_rs::xdr::{ContractId as XdrContractId, Hash, ScAddress, ScString, ScVal, ScVec};
 use wasi_soroban_rs::{
     ClientContractConfigs, ContractId, IntoScVal, SorobanHelperError, SorobanTransactionResponse,
 };
@@ -145,6 +145,28 @@ impl ProjectRootClient {
         execute(&mut self.client_configs, "accept_contract_admin", args).await
     }
 
+    // ── Handler set management ──────────────────────────────────────────
+
+    /// Track `handler` in project_root's handler set. Admin write. The handler
+    /// must report project_root's verification contract. Idempotent on-chain.
+    pub async fn register_handler(
+        &mut self,
+        handler: ContractId,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![contract_address(handler)];
+        execute(&mut self.client_configs, "register_handler", args).await
+    }
+
+    /// Remove `handler` from project_root's handler set. Admin write.
+    /// Idempotent on-chain (a no-op if it wasn't tracked).
+    pub async fn unregister_handler(
+        &mut self,
+        handler: ContractId,
+    ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+        let args = vec![contract_address(handler)];
+        execute(&mut self.client_configs, "unregister_handler", args).await
+    }
+
     pub async fn security_contract(&self) -> Result<ContractId, SorobanHelperError> {
         let res = query(&self.client_configs, "security_contract", vec![]).await?;
         if let ScVal::Address(ScAddress::Contract(XdrContractId(Hash(bytes)))) = res {
@@ -179,4 +201,30 @@ impl ProjectRootClient {
             other => Err(unexpected(&other)),
         }
     }
+
+    /// Returns the handler contracts project_root currently governs (those whose
+    /// admin it has accepted via `accept_contract_admin`). Empty until the first
+    /// handler is registered.
+    pub async fn list_handlers(&self) -> Result<Vec<ContractId>, SorobanHelperError> {
+        let res = query(&self.client_configs, "list_handlers", vec![]).await?;
+        decode_handlers(&res)
+    }
+}
+
+/// Decode a `list_handlers` result: a `ScVal::Vec` whose entries are contract
+/// addresses. Kept pure (no network) so it's unit-testable.
+pub(crate) fn decode_handlers(res: &ScVal) -> Result<Vec<ContractId>, SorobanHelperError> {
+    let ScVal::Vec(Some(ScVec(entries))) = res else {
+        return Err(unexpected(res));
+    };
+    entries
+        .iter()
+        .map(|entry| {
+            if let ScVal::Address(ScAddress::Contract(XdrContractId(Hash(bytes)))) = entry {
+                Ok(ContractId(*bytes))
+            } else {
+                Err(unexpected(entry))
+            }
+        })
+        .collect()
 }
