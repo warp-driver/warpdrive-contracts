@@ -1,5 +1,4 @@
-//! Reproduction test: a **native (classic) multisig** `project_root` owner and
-//! the `wasi-soroban-rs` Address-credential gap (see `SOROBAN_RS.md`).
+//! Reproduction test: a **native (classic) multisig** `project_root` owner
 //!
 //! Opt-in (`#[ignore]`). Runs against a live protocol-26 RPC (testnet). Prefer
 //! `task test-deployer-multisig`.
@@ -13,8 +12,7 @@
 //!   * **A native multisig CAN govern when it is the transaction source.** When
 //!     the multisig signs its own transaction, simulation reports its
 //!     `require_auth` as a `SourceAccount` credential (signer == source), and
-//!     the client simply attaches every key's signature. So the owner finishing
-//!     the handover (`accept_admin`) works today — step 3 below is green.
+//!     the client simply attaches every key's signature.
 //!
 //! ```bash
 //! RPC_URL=https://soroban-testnet.stellar.org \
@@ -132,8 +130,7 @@ async fn native_multisig_owner_governance() {
         .expect("propose native multisig owner as project_root admin");
 
     // ── 3. The owner finishes the handover *as its own source* (works today) ─
-    // The multisig signs accept_admin with both keys; simulation sees signer ==
-    // source and emits a SourceAccount credential, so the client is happy.
+    // The multisig signs accept_admin with both keys
     accept_admin(
         &env,
         &owner_multisig,
@@ -148,13 +145,14 @@ async fn native_multisig_owner_governance() {
         owner_addr,
         "native multisig owner should now be project_root's admin"
     );
+    assert_eq!(
+        pr.pending_admin().await.unwrap(),
+        None,
+        "native multisig owner should now be project_root's admin"
+    );
 
-    // ── 4. A relayer governs *on the multisig's behalf* (the blocked flow) ───
-    // This is how a multisig is driven in practice: a coordinator submits the
-    // transaction and the multisig authorizes via an Address-credential auth
-    // entry. Here the deployer is the relayer (tx source) while project_root's
-    // admin is the owner, so simulation demands Address(owner) — currently
-    // rejected. Expected to fail until the upstream auth-entry signing lands.
+    // ── 4. Multisig owner can now govern project_root  ───
+    // The multisig signs add_secp256k1_signer with both keys to add a new signer
     let relayer_signer = secp_key(0x55);
     add_signer(
         &env,
@@ -168,8 +166,6 @@ async fn native_multisig_owner_governance() {
     )
     .await
     .expect("owner multisig cannot call add-signer");
-
-    // Post-fix assertions (only reached once the gap is closed).
     assert_eq!(
         sec.get_signer_weight(relayer_signer).await.unwrap(),
         42,
