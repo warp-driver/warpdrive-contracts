@@ -1,0 +1,31 @@
+# This runs once per PR when it is merged to main to ensure that 
+name: Deployer Tests
+
+on:
+  push:
+    branches: [main]
+
+env:
+  RUST_VERSION: "1.94.0"
+
+jobs:
+  deployer:
+    name: Test deployer on testnet
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32v1-none
+      - name: Install Task
+        uses: arduino/setup-task@v2
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Run basic deployer tests
+        run: task test-deployer-it
+      - name: Run deployer multisig tests
+        run: task test-deployer-multisig

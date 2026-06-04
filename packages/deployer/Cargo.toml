@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 warpdrive-client = { path = "../client", features = ["manifest"] }
-wasi-soroban-rs = "0.2.8"
+wasi-soroban-rs = "0.2.9"
 ed25519-dalek = "2.2.0"
 stellar-strkey = "0.0.16"
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
@@ -30,6 +30,3 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 warpdrive-shared = { path = "../shared", features = ["testutils"] }
 tempfile = "3"
 sha2 = "0.10"
-
-[patch.crates-io]
-wasi-soroban-rs = { git = "https://github.com/warp-driver/soroban-helpers", rev = "7f7f5c24d51260da670eb3f2d9ad61ee70bf2c35" }
