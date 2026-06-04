@@ -12,18 +12,18 @@
 //!
 //! * **Step 0b — the smart account works end-to-end.** It is friendbot-funded,
 //!   then moves half its XLM to the deployer, authorized by its *own* 2-of-2
-//!   quorum. The relayer (the deployer) submits the transaction and signs the
-//!   account's `Address`-credential auth entry with both ed25519 keys. This is
-//!   the `authorizeEntry` flow `wasi-soroban-rs` should expose as a first-class
-//!   helper (SOROBAN_RS.md); `call_with_multisig` / `sign_auth_entry` below are
-//!   a local stand-in built from its public building blocks, mirroring the
-//!   recipe proven in `contracts/multisig-account`'s unit tests.
+//!   quorum. The relayer (the deployer) submits the transaction;
+//!   `wasi_soroban_rs::simulate_transaction_with_auth` signs the account's
+//!   `Address`-credential auth entry with both ed25519 keys (the `authorizeEntry`
+//!   flow — SOROBAN_RS.md), mirroring the recipe proven in
+//!   `contracts/multisig-account`'s unit tests.
 //!
-//! * **Step 3 — the governance gap (commented out for now).** A contract
-//!   account can never be a transaction *source*, so `accept_admin` (finishing
-//!   a handover to it) needs the owner's `Address` credential. Routed through
-//!   the client's `execute()`, that is rejected with `NotSupported`. Re-enable
-//!   it once the call path uses the multisig signing above.
+//! * **Steps 1–4 — the smart account governs the pipeline.** The deployer
+//!   deploys the pipeline and hands `project_root` over to the smart account,
+//!   which then *finishes* the handover (`accept_admin`) and *governs*
+//!   (`add_secp256k1_signer` via `project_root`). Each is a contract-account
+//!   `require_auth` the deployer relays and the account's 2-of-2 quorum signs
+//!   through `call_with_multisig`.
 //!
 //! ```bash
 //! RPC_URL=https://soroban-testnet.stellar.org \
@@ -33,16 +33,14 @@
 
 use std::path::PathBuf;
 
-use ed25519_dalek::{Signer as _, SigningKey};
+use ed25519_dalek::SigningKey;
 use sha2::{Digest, Sha256};
 use warpdrive_client::project_root::{ProjectRootClient, VerificationType};
+use warpdrive_client::secp256k1_security::Secp256k1SecurityClient;
 use warpdrive_client::warpdrive::WarpdriveClient;
 use warpdrive_deployer::config::{NetworkConfig, client_configs};
 use warpdrive_deployer::deploy::{DEFAULT_PROJECT_SPEC_REPO, DeployParams, deploy_pipeline};
-use warpdrive_deployer::error::DeployerError;
 use warpdrive_deployer::governance::handover;
-#[allow(unused_imports)] // used by the (currently commented) step 3 below
-use warpdrive_deployer::governance::{Target, accept_admin};
 use warpdrive_deployer::identity::{account_from_secret, keygen_and_fund, read_key_file};
 use warpdrive_deployer::ledger::get_latest_ledger;
 use warpdrive_deployer::manifest::Variant;
@@ -50,24 +48,15 @@ use warpdrive_deployer::retry::RetryConfig;
 use wasi_soroban_rs::wasi_stellar_rpc_client::Client;
 use wasi_soroban_rs::xdr::{
     Asset, ContractId as XdrContractId, ContractIdPreimage, Hash, HashIdPreimage,
-    HashIdPreimageContractId, HashIdPreimageSorobanAuthorization, Int128Parts,
-    InvokeHostFunctionOp, Limits, Operation, OperationBody, ScAddress, ScBytes, ScMap, ScMapEntry,
-    ScSymbol, ScVal, ScVec, SorobanAddressCredentials, SorobanAuthorizationEntry,
-    SorobanCredentials, TransactionEnvelope, TransactionExt, TransactionV1Envelope, VecM, WriteXdr,
+    HashIdPreimageContractId, Int128Parts, Limits, ScAddress, ScBytes, ScVal, ScVec, WriteXdr,
 };
 use wasi_soroban_rs::{
-    Account, Contract, ContractId, Env, Operations, SorobanHelperError, SorobanTransactionResponse,
-    TransactionBuilder,
+    Account, Contract, ContractId, Env, Operations, Signer, SorobanHelperError,
+    SorobanTransactionResponse, TransactionBuilder, simulate_transaction_with_auth,
 };
 
 /// The 2-of-2 ed25519 smart-account fixture (`contracts/multisig-account`).
 const SMART_ACCOUNT_WASM: &str = "warpdrive_multisig_account.wasm";
-
-/// Base inclusion fee per operation (stroops).
-const BASE_FEE: u64 = 100;
-/// Padding over the simulated resource fee to cover the bytes added by the
-/// attached multisig signatures (which simulation, run unsigned, doesn't see).
-const FEE_BUFFER: u64 = 200_000;
 
 fn env_or_skip(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| panic!("set {name} to run the multisig test"))
@@ -79,11 +68,14 @@ fn wasm_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("../../target/wasm32v1-none/release"))
 }
 
-// ── ScVal builders ───────────────────────────────────────────────────────────
-
-fn sym(s: &str) -> ScVal {
-    ScVal::Symbol(ScSymbol(s.try_into().expect("symbol")))
+/// A secp256k1 pubkey of the form `02 11 11 …` (33 bytes) seeded by `tag`.
+fn secp_key(tag: u8) -> [u8; 33] {
+    let mut k = [tag; 33];
+    k[0] = 0x02;
+    k
 }
+
+// ── ScVal builders ───────────────────────────────────────────────────────────
 
 fn bytes_scval(b: &[u8]) -> ScVal {
     ScVal::Bytes(ScBytes(b.to_vec().try_into().expect("bytes")))
@@ -103,154 +95,43 @@ fn i128_from_scval(v: &ScVal) -> i128 {
     }
 }
 
-/// One signer's `Ed25519Signature` as the host-encoded `ScVal` — a struct map
-/// with keys sorted (`public_key` before `signature`), matching the fixture's
-/// `Signature = Vec<Ed25519Signature>`.
-fn ed25519_sig_scval(sk: &SigningKey, digest: &[u8; 32]) -> ScVal {
-    let entries = std::vec![
-        ScMapEntry {
-            key: sym("public_key"),
-            val: bytes_scval(&sk.verifying_key().to_bytes()),
-        },
-        ScMapEntry {
-            key: sym("signature"),
-            val: bytes_scval(&sk.sign(digest).to_bytes()),
-        },
-    ];
-    ScVal::Map(Some(ScMap(entries.try_into().expect("sig map"))))
-}
-
-// ── The auth-entry signing wasi-soroban-rs should provide (SOROBAN_RS.md) ─────
-//
-// Given a simulation-returned auth entry, if it's an `Address` credential for
-// `smart_account`, populate its `signature_expiration_ledger` + `signature` by
-// signing the `SorobanAuthorization` preimage with `signers`. Every other entry
-// (a `SourceAccount`, or an `Address` for a different address) passes through.
-
-fn sign_auth_entry(
-    entry: &SorobanAuthorizationEntry,
-    smart_account: &ScAddress,
-    signers: &[SigningKey],
-    valid_until_ledger: u32,
-    network_id: &Hash,
-) -> SorobanAuthorizationEntry {
-    let SorobanCredentials::Address(creds) = &entry.credentials else {
-        return entry.clone();
-    };
-    if &creds.address != smart_account {
-        return entry.clone();
-    }
-
-    // The digest the host recomputes and feeds to the account's `__check_auth`.
-    let preimage = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
-        network_id: network_id.clone(),
-        nonce: creds.nonce,
-        signature_expiration_ledger: valid_until_ledger,
-        invocation: entry.root_invocation.clone(),
-    });
-    let digest: [u8; 32] = Sha256::digest(preimage.to_xdr(Limits::none()).expect("xdr")).into();
-
-    let signature = ScVal::Vec(Some(ScVec(
-        signers
-            .iter()
-            .map(|sk| ed25519_sig_scval(sk, &digest))
-            .collect::<std::vec::Vec<_>>()
-            .try_into()
-            .expect("sig vec"),
-    )));
-
-    SorobanAuthorizationEntry {
-        credentials: SorobanCredentials::Address(SorobanAddressCredentials {
-            address: creds.address.clone(),
-            nonce: creds.nonce,
-            signature_expiration_ledger: valid_until_ledger,
-            signature,
-        }),
-        root_invocation: entry.root_invocation.clone(),
-    }
-}
+/// Ledgers the smart account's auth signatures stay valid for (~83 min on
+/// testnet) — comfortably longer than a slow testnet round trip.
+const SIGNATURE_VALIDITY_LEDGERS: u32 = 1000;
 
 /// Invoke `fn_name(args)` on `contract` with `source` as the tx source/fee
-/// payer, signing every `Address` auth entry that belongs to `smart_account`
-/// with `signers`. This is what `wasi-soroban-rs`'s `execute()` does, minus the
-/// blanket `Address`-credential rejection and plus [`sign_auth_entry`].
+/// payer, authorizing the invocation with `smart_account`'s 2-of-2 quorum.
+///
+/// `wasi-soroban-rs`'s `simulate_transaction_with_auth` does the whole dance —
+/// simulate, sign + attach the smart account's `Address` auth entries,
+/// re-simulate (enforce) and re-price — so this just resolves the signature
+/// expiration ledger, wraps the keys as `Signer`s, builds the call, and submits.
 #[allow(clippy::too_many_arguments)]
 async fn call_with_multisig(
     env: &Env,
+    net: &NetworkConfig,
     source: &Account,
     contract: ContractId,
     fn_name: &str,
     args: Vec<ScVal>,
     smart_account: &ScAddress,
     signers: &[SigningKey],
-    valid_until_ledger: u32,
 ) -> Result<SorobanTransactionResponse, SorobanHelperError> {
+    let signers: Vec<Signer> = signers.iter().cloned().map(Signer::new).collect();
+    let valid_until = get_latest_ledger(&net.rpc_url)
+        .await
+        .map_err(|e| SorobanHelperError::NetworkRequestFailed(format!("latest ledger: {e}")))?
+        + SIGNATURE_VALIDITY_LEDGERS;
+
     let op = Operations::invoke_contract(&contract, fn_name, args)?;
-    let mut tx = TransactionBuilder::new(source, env)
+    let tx = TransactionBuilder::new(source, env)
         .add_operation(op)
         .build()
         .await?;
-
-    let envelope = TransactionEnvelope::Tx(TransactionV1Envelope {
-        tx: tx.clone(),
-        signatures: VecM::default(),
-    });
-    let sim = env.simulate_transaction(&envelope).await?;
-    if let Some(err) = sim.error {
-        return Err(SorobanHelperError::TransactionSimulationFailed(err));
-    }
-    let results = sim.results().unwrap_or_default();
-    let network_id = env.network_id();
-
-    // Attach signed auth to each invoke-host-function op.
-    let mut ops: std::vec::Vec<Operation> = tx.operations.iter().cloned().collect();
-    let mut idx = 0usize;
-    for op in ops.iter_mut() {
-        if let OperationBody::InvokeHostFunction(InvokeHostFunctionOp { auth, .. }) = &mut op.body {
-            let result = results.get(idx).ok_or_else(|| {
-                SorobanHelperError::TransactionSimulationFailed(
-                    "simulation result count does not match operations".to_string(),
-                )
-            })?;
-            let signed: std::vec::Vec<SorobanAuthorizationEntry> = result
-                .auth
-                .iter()
-                .map(|e| {
-                    sign_auth_entry(e, smart_account, signers, valid_until_ledger, &network_id)
-                })
-                .collect();
-            *auth = VecM::try_from(signed).map_err(|_| {
-                SorobanHelperError::XdrEncodingFailed("too many auth entries".to_string())
-            })?;
-            idx += 1;
-        }
-    }
-    tx.operations = VecM::try_from(ops)
-        .map_err(|_| SorobanHelperError::XdrEncodingFailed("too many operations".to_string()))?;
-
-    // Re-simulate *with the signed auth attached*. The first (recording) run
-    // skips `__check_auth`; this one runs it (enforce mode, since auth entries
-    // are now present), so the returned footprint + resource fee account for the
-    // account's signature verification — otherwise submission hits
-    // ResourceLimitExceeded.
-    let envelope = TransactionEnvelope::Tx(TransactionV1Envelope {
-        tx: tx.clone(),
-        signatures: VecM::default(),
-    });
-    let sim = env.simulate_transaction(&envelope).await?;
-    if let Some(err) = sim.error {
-        return Err(SorobanHelperError::TransactionSimulationFailed(err));
-    }
-
-    tx.ext = TransactionExt::V1(sim.transaction_data().map_err(|e| {
-        SorobanHelperError::TransactionFailed(format!("failed to get transaction data: {e}"))
-    })?);
-    tx.fee =
-        u32::try_from(tx.operations.len() as u64 * BASE_FEE + sim.min_resource_fee + FEE_BUFFER)
-            .map_err(|_| SorobanHelperError::InvalidArgument("fee overflows u32".to_string()))?;
+    let tx = simulate_transaction_with_auth(tx, env, smart_account, &signers, valid_until).await?;
 
     let mut src = source.clone();
-    let signed = src.sign_transaction(&tx, &network_id)?;
+    let signed = src.sign_transaction(&tx, &env.network_id())?;
     env.send_transaction(&signed).await
 }
 
@@ -311,33 +192,6 @@ async fn fund_via_friendbot(net: &NetworkConfig, friendbot: Option<&str>, addr: 
     );
 }
 
-// ── Helpers for the (currently commented) governance-gap step 3 ──────────────
-
-/// `true` when `e` is the `SorobanCredentials::Address` rejection from
-/// `wasi-soroban-rs` — the exact gap documented in `SOROBAN_RS.md`.
-#[allow(dead_code)]
-fn is_address_auth_gap(e: &DeployerError) -> bool {
-    matches!(
-        e,
-        DeployerError::Soroban(SorobanHelperError::NotSupported(_))
-    )
-}
-
-/// Asserts a governance call routed through the client is blocked by the
-/// Address-credential gap. Used by step 3 once it is re-enabled.
-#[allow(dead_code)]
-fn expect_blocked_by_address_auth_gap<T>(result: Result<T, DeployerError>, ctx: &str) -> T {
-    match result {
-        Ok(value) => value,
-        Err(e) if is_address_auth_gap(&e) => panic!(
-            "EXPECTED-FAILING (SOROBAN_RS.md gap): {ctx} is blocked because the client \
-             rejects the owner's Address-credential authorization: {e}\n\
-             This test should turn green once wasi-soroban-rs can sign Address auth entries."
-        ),
-        Err(e) => panic!("{ctx}: unexpected (non-gap) error: {e}"),
-    }
-}
-
 #[tokio::test]
 #[ignore = "requires a protocol-26 RPC (testnet); run with --ignored"]
 async fn contract_account_owner_handover() {
@@ -370,6 +224,9 @@ async fn contract_account_owner_handover() {
         .expect("signers vec"),
     )));
     let ctor_args = std::vec![signers_scval, ScVal::U32(2)];
+    // The relayer holds both wallet keys, so it can satisfy the 2-of-2 quorum
+    // for every call the smart account must authorize below.
+    let signers = [signer_a, signer_b];
 
     let owner_wasm = wasm_dir().join(SMART_ACCOUNT_WASM);
     let mut deployer_for_owner = deployer.clone();
@@ -393,12 +250,9 @@ async fn contract_account_owner_handover() {
     assert!(before > 0, "friendbot should have funded the smart account");
 
     let half = before / 2;
-    let valid_until = get_latest_ledger(&net.rpc_url)
-        .await
-        .expect("latest ledger")
-        + 1000;
     call_with_multisig(
         &env,
+        &net,
         &deployer, // relayer / tx source / fee payer
         sac,
         "transfer",
@@ -408,8 +262,7 @@ async fn contract_account_owner_handover() {
             i128_scval(half),
         ],
         &owner_contract_addr,
-        &[signer_a, signer_b],
-        valid_until,
+        &signers,
     )
     .await
     .expect("2-of-2 multisig transfer of half the smart account's XLM");
@@ -462,25 +315,55 @@ async fn contract_account_owner_handover() {
         "smart account should be project_root's pending admin"
     );
 
-    // TODO: uncomment this out later once owner multisig is working properly
+    // ── 3. Finish the handover — the smart account accepts via its quorum ────
+    // accept_admin calls `pending_admin.require_auth()`, and the pending admin
+    // is the smart account (never a tx source). The deployer relays the
+    // transaction; the account's Address auth entry is signed by its 2-of-2
+    // keys via `call_with_multisig`.
+    call_with_multisig(
+        &env,
+        &net,
+        &deployer,
+        project_root,
+        "accept_admin",
+        std::vec![],
+        &owner_contract_addr,
+        &signers,
+    )
+    .await
+    .expect("smart account accept-admin via 2-of-2 quorum");
 
-    // // ── 3. Finish the handover — blocked by the Address-credential gap ───────
-    // // accept_admin calls `pending_admin.require_auth()`. The pending admin is a
-    // // contract account, which can never be the tx source, so simulation returns
-    // // Address(owner) and the client rejects it. A relayer (the deployer here)
-    // // submitting on the smart account's behalf — and signing its 2-of-2 auth
-    // // entry — is exactly the flow the upstream fix must enable. Expected to
-    // // fail today.
-    // let accepted = accept_admin(&env, &deployer, &manifest, Target::ProjectRoot, retry_cfg).await;
-    // expect_blocked_by_address_auth_gap(
-    //     accepted,
-    //     "accept-admin finishing handover to a 2-of-2 smart-account owner",
-    // );
+    assert_eq!(
+        pr.admin().await.unwrap(),
+        owner_contract_addr,
+        "smart account should now be project_root's admin"
+    );
 
-    // // Post-fix assertion (only reached once the gap is closed).
-    // assert_eq!(
-    //     pr.admin().await.unwrap(),
-    //     owner_contract_addr,
-    //     "smart account should become project_root's admin once Address auth is supported"
-    // );
+    // ── 4. The owner governs: add a security signer via project_root ─────────
+    // project_root.add_secp256k1_signer forwards to the security contract and
+    // requires project_root's admin (now the smart account) to authorize — the
+    // same 2-of-2 quorum, again relayed by the deployer. (This is the multisig
+    // equivalent of the relayed add-signer at the end of multisig_native.rs.)
+    let new_signer = secp_key(0x55);
+    call_with_multisig(
+        &env,
+        &net,
+        &deployer,
+        project_root,
+        "add_secp256k1_signer",
+        std::vec![bytes_scval(&new_signer), ScVal::U64(42)],
+        &owner_contract_addr,
+        &signers,
+    )
+    .await
+    .expect("owner adds a security signer via project_root (2-of-2)");
+
+    let security = manifest.security().unwrap();
+    let sec = Secp256k1SecurityClient::new(client_configs(&env, &deployer, security));
+    assert_eq!(
+        sec.get_signer_weight(new_signer).await.unwrap(),
+        42,
+        "owner-added signer weight should be set"
+    );
+    eprintln!("smart account added a security signer via project_root (2-of-2)");
 }

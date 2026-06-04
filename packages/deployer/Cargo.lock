@@ -3184,7 +3184,7 @@ dependencies = [
  "stellar-strkey 0.0.16",
  "tokio",
  "wasi-soroban-rs",
- "wasi-soroban-rs-macros",
+ "wasi-soroban-rs-macros 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3289,8 +3289,7 @@ dependencies = [
 [[package]]
 name = "wasi-soroban-rs"
 version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7ad1b6136df096fcdf5adab0e4967c2da2de1a019c16c082485c61020fe4c16"
+source = "git+https://github.com/warp-driver/soroban-helpers?rev=7f7f5c24d51260da670eb3f2d9ad61ee70bf2c35#7f7f5c24d51260da670eb3f2d9ad61ee70bf2c35"
 dependencies = [
  "async-trait",
  "ed25519-dalek",
@@ -3300,7 +3299,7 @@ dependencies = [
  "stellar-strkey 0.0.16",
  "stellar-xdr",
  "tokio",
- "wasi-soroban-rs-macros",
+ "wasi-soroban-rs-macros 0.2.8 (git+https://github.com/warp-driver/soroban-helpers?rev=7f7f5c24d51260da670eb3f2d9ad61ee70bf2c35)",
  "wasi-stellar-rpc-client",
 ]
 
@@ -3309,6 +3308,16 @@ name = "wasi-soroban-rs-macros"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aaab315f425fac94afc42ee0584ebd2c9d25ce88b3e5854161b769c56eed22bb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "wasi-soroban-rs-macros"
+version = "0.2.8"
+source = "git+https://github.com/warp-driver/soroban-helpers?rev=7f7f5c24d51260da670eb3f2d9ad61ee70bf2c35#7f7f5c24d51260da670eb3f2d9ad61ee70bf2c35"
 dependencies = [
  "proc-macro2",
  "quote",
