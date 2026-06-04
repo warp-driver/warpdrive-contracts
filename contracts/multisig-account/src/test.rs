@@ -26,7 +26,7 @@ use sha2::{Digest, Sha256};
 use soroban_sdk::{
     Address, BytesN, Env, IntoVal, Symbol, Val, Vec,
     auth::{Context, ContractContext},
-    testutils::{Address as _, Ledger as _, MockAuth, MockAuthInvoke},
+    testutils::{Address as _, Ledger as _, MockAuth, MockAuthInvoke, Register},
     token, vec,
     xdr::{
         Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs,
@@ -59,13 +59,18 @@ fn sign(env: &Env, sk: &SigningKey, payload: &BytesN<32>) -> Ed25519Signature {
     }
 }
 
-/// Register the account with the given signers and threshold (runs the ctor).
-fn register(env: &Env, signers: &[&SigningKey], threshold: u32) -> Address {
+/// The registered-signer key vector for the given signing keys.
+fn key_vec(env: &Env, signers: &[&SigningKey]) -> Vec<BytesN<32>> {
     let mut keys = Vec::new(env);
     for sk in signers {
         keys.push_back(pubkey(env, sk));
     }
-    env.register(MultisigAccount, (keys, threshold))
+    keys
+}
+
+/// Register the account with the given signers and threshold (runs the ctor).
+fn register(env: &Env, signers: &[&SigningKey], threshold: u32) -> Address {
+    MultisigAccount.register(env, None, (key_vec(env, signers), threshold))
 }
 
 /// A `Vec<Context>` describing a token `transfer` — what the account is asked
@@ -155,6 +160,58 @@ fn duplicate_signer_does_not_satisfy_quorum() {
     assert_eq!(
         check_auth(&env, &account, &payload, sigs),
         Err(Error::DuplicateSigner),
+    );
+}
+
+// ── Constructor validation ───────────────────────────────────────────────────
+//
+// soroban-sdk has no fallible `try_register`: `env.register` (and the `Register`
+// trait's `MultisigAccount.register`) trap when a constructor returns `Err`,
+// surfacing only a generic host error — not the contract error variant. To
+// assert the *specific* variant we instead invoke `__constructor` directly
+// inside a contract frame via `env.as_contract`; its validation branches return
+// their typed `Err` before touching storage, so the call yields the typed
+// `Result` rather than trapping. (`register` here just gives us a frame to
+// borrow.)
+
+/// Run `__constructor(signers, threshold)` in a contract frame and return its
+/// typed result, without registering a new contract.
+fn try_construct(env: &Env, signers: &[&SigningKey], threshold: u32) -> Result<(), Error> {
+    let frame = register(env, &[&keypair(0x01), &keypair(0x02)], 2);
+    let keys = key_vec(env, signers);
+    env.as_contract(&frame, || {
+        MultisigAccount::__constructor(env.clone(), keys, threshold)
+    })
+}
+
+#[test]
+fn constructor_rejects_zero_threshold() {
+    let env = Env::default();
+    let (a, b) = (keypair(0xA1), keypair(0xB2));
+    // Two valid, distinct signers — only the zero threshold is wrong.
+    assert_eq!(try_construct(&env, &[&a, &b], 0), Err(Error::ThresholdZero));
+}
+
+#[test]
+fn constructor_rejects_threshold_above_signer_count() {
+    let env = Env::default();
+    let (a, b) = (keypair(0xA1), keypair(0xB2));
+    // Threshold 3 over two signers is an unreachable quorum.
+    assert_eq!(
+        try_construct(&env, &[&a, &b], 3),
+        Err(Error::ThresholdExceedsSigners),
+    );
+}
+
+#[test]
+fn constructor_rejects_duplicate_signers() {
+    let env = Env::default();
+    let a = keypair(0xA1);
+    // The same key twice: threshold 2 is satisfiable on count but the set has
+    // only one distinct key, so the duplicate is rejected.
+    assert_eq!(
+        try_construct(&env, &[&a, &a], 2),
+        Err(Error::DuplicateSignerInSet),
     );
 }
 

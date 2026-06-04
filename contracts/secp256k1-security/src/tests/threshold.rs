@@ -8,7 +8,7 @@ use soroban_sdk::{
     testutils::{Address as _, MockAuth, MockAuthInvoke},
 };
 
-// ── T-1: set_threshold tests ────────────────────────────────────────
+// ── set_threshold tests ────────────────────────────────────────
 
 #[test]
 fn test_set_threshold_success() {
@@ -79,7 +79,7 @@ fn test_set_threshold_affects_required_weight() {
     assert_eq!(client.required_weight(), 150);
 }
 
-// ── T-10: Admin auth on set_threshold ───────────────────────────────
+// ── Admin auth on set_threshold ───────────────────────────────
 
 #[test]
 fn test_set_threshold_requires_admin() {
@@ -102,7 +102,7 @@ fn test_set_threshold_requires_admin() {
     assert!(result.is_err());
 }
 
-// ── T-4: threshold getters ──────────────────────────────────────────
+// ── threshold getters ──────────────────────────────────────────
 
 #[test]
 fn test_threshold_getters_match_constructor() {

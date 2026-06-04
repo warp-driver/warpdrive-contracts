@@ -50,6 +50,13 @@ pub enum Error {
     DuplicateSigner = 3,
     /// Fewer than `threshold` distinct valid signatures were supplied.
     InsufficientSignatures = 4,
+    /// The constructor was given a threshold of zero (no quorum can be met).
+    ThresholdZero = 5,
+    /// The constructor's threshold exceeds the number of signers, so the
+    /// quorum could never be reached.
+    ThresholdExceedsSigners = 6,
+    /// The constructor's signer set contained the same key more than once.
+    DuplicateSignerInSet = 7,
 }
 
 #[contracttype]
@@ -64,11 +71,30 @@ enum DataKey {
 impl MultisigAccount {
     /// Register the signer set and the approval threshold (e.g. `threshold = 2`
     /// with two signers is a 2-of-2).
-    pub fn __constructor(env: Env, signers: Vec<BytesN<32>>, threshold: u32) {
+    ///
+    /// Rejects nonsensical configurations: a zero threshold, a threshold larger
+    /// than the signer set (an unreachable quorum), and a signer set with
+    /// duplicate keys (which would let one key count more than once).
+    pub fn __constructor(env: Env, signers: Vec<BytesN<32>>, threshold: u32) -> Result<(), Error> {
+        if threshold == 0 {
+            return Err(Error::ThresholdZero);
+        }
+        if threshold > signers.len() {
+            return Err(Error::ThresholdExceedsSigners);
+        }
+        let mut seen: Vec<BytesN<32>> = Vec::new(&env);
+        for key in signers.iter() {
+            if seen.contains(&key) {
+                return Err(Error::DuplicateSignerInSet);
+            }
+            seen.push_back(key);
+        }
+
         env.storage().instance().set(&DataKey::Signers, &signers);
         env.storage()
             .instance()
             .set(&DataKey::Threshold, &threshold);
+        Ok(())
     }
 
     /// The registered signer public keys.
