@@ -2940,7 +2940,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-client"
-version = "0.3.0-beta.1"
+version = "0.3.0-rc.1"
 dependencies = [
  "ed25519-dalek",
  "serde",
@@ -2956,7 +2956,7 @@ dependencies = [
 
 [[package]]
 name = "warpdrive-shared"
-version = "0.3.0-beta.1"
+version = "0.3.0-rc.1"
 dependencies = [
  "ed25519-dalek",
  "k256",
@@ -3034,9 +3034,9 @@ dependencies = [
 
 [[package]]
 name = "wasi-soroban-rs"
-version = "0.2.8"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7ad1b6136df096fcdf5adab0e4967c2da2de1a019c16c082485c61020fe4c16"
+checksum = "28a4d2bdb461a54458cedeb7c6b41b767c60a26f9e2cf60f097e9ba88de0aa3e"
 dependencies = [
  "async-trait",
  "ed25519-dalek",

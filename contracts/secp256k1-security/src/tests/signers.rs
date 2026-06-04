@@ -9,7 +9,7 @@ use soroban_sdk::{
 };
 use warpdrive_shared::testutils::{make_secp256k1_key, secp256k1_pubkey};
 
-// ── T-11: Use valid compressed pubkeys ──────────────────────────────
+// ── Use valid compressed pubkeys ──────────────────────────────
 
 fn make_signer(env: &Env, seed: u8) -> CompressedSecpPubKey {
     secp256k1_pubkey(env, &make_secp256k1_key(seed))
@@ -129,7 +129,7 @@ fn test_assert_admin_auth() {
     assert_eq!(client.get_total_weight(), weight);
 }
 
-// ── T-9: Removing a non-existent signer is a no-op ─────────────────
+// ── Removing a non-existent signer is a no-op ─────────────────
 
 #[test]
 fn test_remove_nonexistent_signer_is_noop() {
@@ -150,7 +150,7 @@ fn test_remove_nonexistent_signer_is_noop() {
     assert_eq!(client.list_signers().len(), 1);
 }
 
-// ── T-10: Admin auth on remove_signer ───────────────────────────────
+// ── Admin auth on remove_signer ───────────────────────────────
 
 #[test]
 fn test_remove_signer_requires_admin() {

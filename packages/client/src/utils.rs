@@ -1,6 +1,6 @@
 use wasi_soroban_rs::xdr::{
-    InvokeHostFunctionOp, OperationBody, ScVal, SorobanAuthorizationEntry, SorobanCredentials,
-    Transaction, TransactionEnvelope, TransactionExt, TransactionV1Envelope, VecM,
+    InvokeHostFunctionOp, OperationBody, ScVal, SorobanAuthorizationEntry, Transaction,
+    TransactionEnvelope, TransactionExt, TransactionV1Envelope, VecM,
 };
 use wasi_soroban_rs::{
     ClientContractConfigs, Env, Operations, SorobanHelperError, SorobanTransactionResponse,
@@ -57,26 +57,16 @@ pub async fn execute(
         return Err(SorobanHelperError::TransactionSimulationFailed(err));
     }
 
-    // If we would simulate calling a function that does have admin.require_auth() call (like upgrade),
-    // the sim_results would return a success containing an Address which is required for this operation's authentication.
-    // If I understand correctly, when sim reads admin from storage it compares it to the tx's source account
-    // and if it's the same it returns SourceAccount, if not it's just an Address(admin_pubkey).
-    // https://docs.rs/soroban-sdk/latest/soroban_sdk/xdr/enum.SorobanCredentials.html
-    // That's why if the returned auth result is an Address(_) it means it will fail the require_auth() call on real execution.
-    let sim_results = simulation.results().unwrap_or_default();
-    for result in &sim_results {
-        for auth in &result.auth {
-            if matches!(auth.credentials, SorobanCredentials::Address(_)) {
-                return Err(SorobanHelperError::NotSupported(
-                    "Address authorization not yet supported".to_string(),
-                ));
-            }
-        }
-    }
-
     // Attach the auth entries from the simulation to the invoke-host-function
     // operations. Without this, require_auth() calls (e.g. admin checks) fail on
     // the real network with TxMalformed even if the source account is authorized.
+    //
+    // `Address`-credential entries (a required signer that isn't the tx source)
+    // are no longer rejected here: callers that hold the signer's keys drive
+    // such calls through `wasi_soroban_rs::simulate_transaction_with_auth`, and
+    // the source-account build path itself surfaces a clear, address-naming
+    // `NotSupported` for the unsignable case.
+    let sim_results = simulation.results().unwrap_or_default();
     attach_auth_from_simulation(&mut tx, &sim_results)?;
 
     // Attach the Soroban transaction data (resource footprint) from the

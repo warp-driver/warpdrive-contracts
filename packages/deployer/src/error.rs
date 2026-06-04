@@ -50,7 +50,7 @@ impl Retryable for SorobanHelperError {
         // signer can't satisfy an Address-credential auth requirement, and a
         // re-simulation yields the identical result. Treat it (and any other
         // NotSupported) as permanent. Everything else (RPC/network/simulation
-        // hiccups) may be transient, so stays retryable. See SOROBAN_RS.md.
+        // hiccups) may be transient, so stays retryable.
         !matches!(self, SorobanHelperError::NotSupported(_))
     }
 }

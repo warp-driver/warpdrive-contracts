@@ -10,7 +10,7 @@ use std::time::Duration;
 /// so they fail fast instead of burning the whole retry budget + emitting
 /// alarming "attempt N/M failed" noise. In particular the
 /// "Address authorization not yet supported" rejection is permanent — a re-run
-/// re-simulates to the identical result — see SOROBAN_RS.md.
+/// re-simulates to the identical result.
 pub trait Retryable {
     fn is_retryable(&self) -> bool;
 }

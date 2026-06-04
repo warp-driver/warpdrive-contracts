@@ -8,7 +8,8 @@ on:
   pull_request:
     paths:
       - "docker/middleware/**"
-      - "packages/deployer/**"
+      - "packages/deployer/Cargo.toml"
+      - "packages/deployer/src/**"
       - ".github/workflows/middleware-image.yml"
 
 env:

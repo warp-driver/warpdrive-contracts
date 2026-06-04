@@ -65,9 +65,10 @@ tasks:
     desc: >-
       Local-only: run the deployer's live integration tests against Stellar
       testnet, funding fresh friendbot accounts (no docker build needed). These
-      are #[ignore]d so they never run in CI / `task test`. Override RPC_URL /
-      NETWORK_PASSPHRASE to target another protocol-26 network (local Quickstart
-      maxes at protocol 25, so it can't run these).
+      are #[ignore]d, so `task test` / the per-PR CI skip them; only the
+      dedicated Deployer Tests workflow runs them, on push to main. Override
+      RPC_URL / NETWORK_PASSPHRASE to target another protocol-26 network (local
+      Quickstart maxes at protocol 25, so it can't run these).
     deps: [build-contracts]
     env:
       # Default to testnet; honour an exported override. Friendbot is derived
@@ -81,12 +82,13 @@ tasks:
 
   test-deployer-multisig:
     desc: >-
-      Local-only: run just the multisig reproduction tests against Stellar
+      Local-only: run just the multisig integration tests against Stellar
       testnet (native + contract-account project_root owners). These are
-      #[ignore]d and EXPECTED TO FAIL today — they prove the wasi-soroban-rs
-      Address-credential gap (SOROBAN_RS.md) before it is fixed upstream, and
-      should turn green once the client can sign Address auth entries. Override
-      RPC_URL / NETWORK_PASSPHRASE to target another protocol-26 network.
+      #[ignore]d, so `task test` / the per-PR CI skip them; only the dedicated
+      Deployer Tests workflow runs them, on push to main. They prove the client
+      can sign Address-credential auth entries — a smart account's 2-of-2 quorum
+      authorizing calls via wasi-soroban-rs. Override RPC_URL /
+      NETWORK_PASSPHRASE to target another protocol-26 network.
     deps: [build-contracts]
     env:
       RPC_URL:
@@ -94,7 +96,7 @@ tasks:
       NETWORK_PASSPHRASE:
         sh: echo "${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}"
     cmds:
-      - cd packages/deployer && cargo test --test multisig_native -- --ignored --nocapture
+      - cd packages/deployer && cargo test --test multisig_native --test multisig_contract -- --ignored --nocapture
 
   doc-test:
     desc: Run documentation tests

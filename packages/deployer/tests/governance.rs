@@ -150,7 +150,7 @@ async fn full_governance_lifecycle() {
     // project_root.add_secp256k1_signer now requires the *owner's* auth, but the
     // deployer is the tx source, so simulation demands an Address credential the
     // SourceAccount-only client can't satisfy. It fails fast (this permanent
-    // NotSupported error is non-retryable — see retry::Retryable, SOROBAN_RS.md).
+    // NotSupported error is non-retryable — see retry::Retryable).
     let deployer_attempt = add_signer(
         &env,
         &deployer,
