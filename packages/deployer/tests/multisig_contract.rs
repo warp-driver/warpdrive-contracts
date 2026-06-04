@@ -1,5 +1,5 @@
-//! Reproduction test: a **contract-account (smart wallet)** `project_root`
-//! owner and the `wasi-soroban-rs` Address-credential gap (see `SOROBAN_RS.md`).
+//! Integration test: a **contract-account (smart wallet)** `project_root`
+//! owner signing through `wasi-soroban-rs`'s Address-credential auth flow.
 //!
 //! Opt-in (`#[ignore]`). Runs against a live protocol-26 RPC (testnet). Prefer
 //! `task test-deployer-multisig`.
@@ -15,7 +15,7 @@
 //!   quorum. The relayer (the deployer) submits the transaction;
 //!   `wasi_soroban_rs::simulate_transaction_with_auth` signs the account's
 //!   `Address`-credential auth entry with both ed25519 keys (the `authorizeEntry`
-//!   flow — SOROBAN_RS.md), mirroring the recipe proven in
+//!   flow), mirroring the recipe proven in
 //!   `contracts/multisig-account`'s unit tests.
 //!
 //! * **Steps 1–4 — the smart account governs the pipeline.** The deployer
@@ -68,7 +68,8 @@ fn wasm_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("../../target/wasm32v1-none/release"))
 }
 
-/// A secp256k1 pubkey of the form `02 11 11 …` (33 bytes) seeded by `tag`.
+/// A dummy 33-byte secp256k1 pubkey: the `0x02` compressed-key prefix followed
+/// by 32 bytes all set to `tag` (e.g. `tag = 0x55` → `02 55 55 … 55`).
 fn secp_key(tag: u8) -> [u8; 33] {
     let mut k = [tag; 33];
     k[0] = 0x02;

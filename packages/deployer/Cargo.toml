@@ -1,7 +1,7 @@
 [package]
 name = "warpdrive-deployer"
 description = "Native deployer CLI for the WarpDrive Stellar contracts"
-version = "0.3.0-beta.1"
+version = "0.3.0-rc.1"
 edition = "2024"
 rust-version = "1.90.0"
 license = "GPL-3.0-or-later"

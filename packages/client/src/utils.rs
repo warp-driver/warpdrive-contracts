@@ -65,7 +65,7 @@ pub async fn execute(
     // are no longer rejected here: callers that hold the signer's keys drive
     // such calls through `wasi_soroban_rs::simulate_transaction_with_auth`, and
     // the source-account build path itself surfaces a clear, address-naming
-    // `NotSupported` for the unsignable case (see SOROBAN_RS.md).
+    // `NotSupported` for the unsignable case.
     let sim_results = simulation.results().unwrap_or_default();
     attach_auth_from_simulation(&mut tx, &sim_results)?;
 

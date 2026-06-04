@@ -4,7 +4,7 @@
 //! A deliberately small **contract account** (a `C…` address with a custom
 //! `__check_auth`) used by the deployer integration tests to exercise the
 //! "`project_root` owner is a contract account" path — see
-//! `packages/deployer/tests/multisig_contract.rs` and `SOROBAN_RS.md`.
+//! `packages/deployer/tests/multisig_contract.rs`.
 //!
 //! It is **not** part of the WarpDrive pipeline; it is a stand-in for a real
 //! smart wallet. The design mirrors the shape of OpenZeppelin's
