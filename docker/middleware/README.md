@@ -131,20 +131,24 @@ docker exec wdm warpdrive-deployer deploy --output-path /out/deploy.json
 ```bash
 docker exec wdm warpdrive-deployer keygen
 
-docker exec wdm warpdrive-deployer deploy --output-path /out/deploy.json
+docker exec wdm warpdrive-deployer deploy --output-path /out/deploy.json --variant stellar
 
 docker exec wdm warpdrive-deployer add-signer \
+  --via-project-root \
   --scheme secp256k1 --key 0xabcd... --weight 100 \
   --deploy-file /out/deploy.json
 
 docker exec wdm warpdrive-deployer set-threshold \
-  --scheme secp256k1 --numerator 2 --denominator 3 \
+  --via-project-root \
+  --scheme ed25519 --numerator 2 --denominator 3 \
   --deploy-file /out/deploy.json
 
 docker exec wdm warpdrive-deployer get-project-spec-repo \
+  --via-project-root \
   --deploy-file /out/deploy.json
 
 docker exec wdm warpdrive-deployer set-project-spec-repo \
+  --via-project-root \
   --repo "ipfs://bafy.../spec.json" \
   --deploy-file /out/deploy.json
 ```
