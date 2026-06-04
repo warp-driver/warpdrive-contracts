@@ -79,6 +79,23 @@ tasks:
     cmds:
       - cd packages/deployer && cargo test --test network --test governance -- --ignored --nocapture
 
+  test-deployer-multisig:
+    desc: >-
+      Local-only: run just the multisig reproduction tests against Stellar
+      testnet (native + contract-account project_root owners). These are
+      #[ignore]d and EXPECTED TO FAIL today — they prove the wasi-soroban-rs
+      Address-credential gap (SOROBAN_RS.md) before it is fixed upstream, and
+      should turn green once the client can sign Address auth entries. Override
+      RPC_URL / NETWORK_PASSPHRASE to target another protocol-26 network.
+    deps: [build-contracts]
+    env:
+      RPC_URL:
+        sh: echo "${RPC_URL:-https://soroban-testnet.stellar.org}"
+      NETWORK_PASSPHRASE:
+        sh: echo "${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}"
+    cmds:
+      - cd packages/deployer && cargo test --test multisig_native -- --ignored --nocapture
+
   doc-test:
     desc: Run documentation tests
     deps: [build]
