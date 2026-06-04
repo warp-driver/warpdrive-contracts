@@ -173,10 +173,16 @@ tasks:
       # deployed, not stale state from a prior --variant=both invocation.
       # The friendbot identity in out/.keys is preserved across runs.
       - rm -f out/deploy.json out/deploy-stellar.json
-      # Default (no flag) — ethereum/secp256k1 pipeline + project-root only.
-      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh deploy --output-path /out/deploy.json
-      # --variant stellar — ed25519 pipeline + project-root only.
+      # --variant stellar = ed25519 pipeline + project-root only.
       - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh deploy --variant stellar --output-path /out/deploy-stellar.json
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh add-signer --via-project-root --scheme ed25519 --key 6faa11172d59cc103b4c6902657415643cc2ff41f2504817ffd4325985cfd2a5 --weight 10000 --deploy-file /out/deploy-stellar.json
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh set-threshold --via-project-root --scheme ed25519 --numerator 2 --denominator 3 --deploy-file /out/deploy-stellar.json
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh set-project-spec-repo --repo "https://warp-drive.xyz/" --deploy-file /out/deploy-stellar.json
+      # --variant ethereum = secp256k1 pipeline + project-root only.
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh deploy --variant ethereum --output-path /out/deploy.json
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh add-signer --via-project-root --scheme secp256k1 --key 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5 --weight 10000 --deploy-file /out/deploy.json
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh set-threshold --via-project-root --scheme secp256k1 --numerator 2 --denominator 3 --deploy-file /out/deploy.json
+      - IMAGE=warpdrive-stellar-middleware:dev ./docker/middleware/smoke.sh set-project-spec-repo --repo "https://warp-drive.xyz/" --deploy-file /out/deploy.json
       # smoke.sh runs the container as root, so manifests land root-owned. Chown them back so host tools can read them.
       - docker run --rm -v "$PWD/out:/out" warpdrive-stellar-middleware:dev chown -R "$(id -u):$(id -g)" /out
       - jq -e '.contracts | has("project_root") and has("secp256k1_security") and (has("ed25519_security") | not)' out/deploy.json >/dev/null

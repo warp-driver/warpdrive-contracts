@@ -107,7 +107,7 @@ docker run -d --rm --name wdm \
 # easy run commands to deploy and update the contracts
 docker exec wdm warpdrive-deployer keygen
 
-docker exec wdm warpdrive-deployer deploy --output-path /out/deploy.json
+docker exec wdm warpdrive-deployer deploy --variant stellar --output-path /out/deploy.json
 ```
 
 ## Dev Quick Start
